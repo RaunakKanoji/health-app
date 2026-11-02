@@ -1,0 +1,92 @@
+[
+  {
+    "id": "successful-followup",
+    "title": "Successful follow-up",
+    "description": "A reviewed result is acknowledged, a referral is accepted, an encounter and evidence are recorded, and an authorized clinician closes care.",
+    "expectedState": "CLOSED"
+  },
+  {
+    "id": "missing-acknowledgement",
+    "title": "Missing patient acknowledgement",
+    "description": "Simulated message delivery never becomes acknowledgement; closure remains blocked while explicit patient acknowledgement is absent.",
+    "expectedState": "ACTIVE"
+  },
+  {
+    "id": "referral-rejection",
+    "title": "Referral rejected",
+    "description": "The receiving provider rejects with a reason. The current owner retains accountability and receives recovery work.",
+    "expectedState": "BLOCKED"
+  },
+  {
+    "id": "appointment-no-show",
+    "title": "Appointment no-show",
+    "description": "A scheduled appointment marked no-show does not create a completed encounter or closure evidence.",
+    "expectedState": "BLOCKED"
+  },
+  {
+    "id": "incomplete-documentation",
+    "title": "Incomplete clinical documentation",
+    "description": "An encounter without required clinical documentation remains eligible for evidence collection, never verified closure.",
+    "expectedState": "ACTIVE"
+  },
+  {
+    "id": "missing-evidence",
+    "title": "Missing closure evidence",
+    "description": "An attempted closure without policy-required evidence fails without changing the active episode.",
+    "expectedState": "ACTIVE"
+  },
+  {
+    "id": "corrected-report",
+    "title": "Corrected laboratory report",
+    "description": "A new source result version preserves prior history and returns affected care to clinical review.",
+    "expectedState": "REOPENED"
+  },
+  {
+    "id": "duplicate-webhook",
+    "title": "Duplicate webhook delivery",
+    "description": "The same stable source event delivered twice has one episode and one durable downstream effect.",
+    "expectedState": "ACTIVE"
+  },
+  {
+    "id": "failed-ownership-transfer",
+    "title": "Failed ownership transfer",
+    "description": "A rejected or unaccepted transfer keeps the prior accountable owner and exposes recovery work.",
+    "expectedState": "ACTIVE"
+  },
+  {
+    "id": "overdue-critical-review",
+    "title": "Overdue review escalation",
+    "description": "A synthetic clinician-approved review deadline passes; an escalation is created without automatic triage or closure.",
+    "expectedState": "OVERDUE"
+  },
+  {
+    "id": "revoked-consent",
+    "title": "Optional communication consent revoked",
+    "description": "Revocation before dispatch prevents a queued optional simulated message from being delivered. Care remains active.",
+    "expectedState": "ACTIVE"
+  },
+  {
+    "id": "ml-provider-failure",
+    "title": "ML provider unavailable",
+    "description": "An unavailable research model produces a visibly marked fallback or unavailable state; human workflow and escalation still work.",
+    "expectedState": "ACTIVE"
+  },
+  {
+    "id": "cross-tenant-access",
+    "title": "Cross-tenant access attempt",
+    "description": "An actor without a specific organization grant cannot read or mutate the other tenant episode.",
+    "expectedState": "ACTIVE"
+  },
+  {
+    "id": "unauthorized-closure",
+    "title": "Unauthorized closure attempt",
+    "description": "A coordinator, patient or research service cannot approve clinical closure, even with complete evidence.",
+    "expectedState": "ACTIVE"
+  },
+  {
+    "id": "verified-closure",
+    "title": "Clinician-approved verified closure",
+    "description": "Only an authenticated clinician with current review, explicit acknowledgement, accepted referral, completed encounter and required evidence can close.",
+    "expectedState": "CLOSED"
+  }
+]

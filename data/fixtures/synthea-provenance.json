@@ -1,0 +1,10 @@
+{
+  "source": "https://github.com/synthetichealth/synthea-sample-data",
+  "archive_url": "https://raw.githubusercontent.com/synthetichealth/synthea-sample-data/main/downloads/latest/synthea_sample_data_fhir_latest.zip",
+  "retrieved_on": "2026-10-27",
+  "original_filename": "Alberta625_Schmeler639_d1974b52-f588-45cf-5c27-9e5b1e47d889.json",
+  "sha256": "a2f0a958fd87a613f51b222f8d8121a0c5174e001bdaf538db5a105f37999ff0",
+  "archive_sha256": "66141b772671452f590f9b7bb999eb201f1f16beb94a84ab0885ed723b36b315",
+  "synthetic": true,
+  "modifications": "None. Exact source Bundle retained. Imported resource subset is documented separately."
+}

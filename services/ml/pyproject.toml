@@ -1,0 +1,23 @@
+[project]
+name = "careloop-ml"
+version = "0.1.0"
+description = "Synthetic operational referral non-completion research service"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn>=0.34,<1",
+  "numpy>=2.2,<3",
+  "scikit-learn>=1.6,<2",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10", "httpx>=0.28,<1"]
+explain = ["shap>=0.47,<1"]
+compare = ["xgboost>=3,<4"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100

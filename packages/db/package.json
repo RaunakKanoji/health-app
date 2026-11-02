@@ -1,0 +1,12 @@
+{
+  "name": "@careloop/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "migrate": "node --env-file=../../.env --import tsx src/migrate.ts"
+  }
+}
