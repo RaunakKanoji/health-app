@@ -20,5 +20,8 @@ test-results/
 *.tsbuildinfo
 services/ml/artifacts/
 
+# Local project context and reference material
+/context/
+
 # Local Clerk linking/claim material
 .clerk/
