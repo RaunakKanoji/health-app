@@ -1,5 +1,5 @@
 import { beforeAll,afterAll,describe,it,expect } from 'vitest';
-import { testApplication,signIn,action,newEpisode } from '../helpers.ts';
+import { testApplication,signIn,action,newEpisode,revokeFixtureSession } from '../helpers.ts';
 import type { Episode } from '../../packages/contracts/src/careloop.ts';
 
 describe('Server-enforced authorization and privacy boundaries',()=>{
@@ -10,7 +10,7 @@ describe('Server-enforced authorization and privacy boundaries',()=>{
  it('requires authentication and cannot use a UI-selected role as authorization',async()=>{
   expect((await context.app.inject({url:'/api/workspace'})).statusCode).toBe(401);
   const fake=await context.app.inject({url:'/api/workspace',headers:{'x-user-role':'admin','x-organization-id':'org-screening'}});expect(fake.statusCode).toBe(401);
-  const login=await context.app.inject({method:'POST',url:'/api/auth/login',payload:{email:'clinician@careloop.demo',password:'wrong-password'}});expect(login.statusCode).toBe(401);expect(login.body).not.toContain('password_hash');
+  const login=await context.app.inject({method:'POST',url:'/api/auth/login',payload:{email:'clinician@careloop.demo',password:'wrong-password'}});expect(login.statusCode).toBe(410);expect(login.body).not.toContain('password_hash');
  });
  it('returns indistinguishable not-found responses for foreign and nonexistent episodes',async()=>{
   const e=await newEpisode(context.app,clinician);
@@ -44,7 +44,7 @@ describe('Server-enforced authorization and privacy boundaries',()=>{
   const malicious=await action(context.app,clinician,e,{type:'add_evidence',evidenceKind:'followup_report',title:'Unsafe file',content:'<script>alert(document.cookie)</script>'});expect(malicious.statusCode).toBe(409);
   expect((await context.app.inject({url:`/api/episodes/${e.id}`})).statusCode).toBe(401);
  });
- it('sends no-store headers and stores hashes instead of session bearer tokens',async()=>{
+ it('sends no-store headers and never stores Clerk bearer tokens in legacy sessions',async()=>{
   const response=await context.app.inject({url:'/api/workspace',headers:{cookie:clinician}});expect(response.headers['cache-control']).toContain('no-store');expect(response.body).not.toContain('password_hash');
   const sessionToken=clinician.split('=')[1];const sessions=await context.app.db.pool.query('SELECT id FROM sessions');expect(sessions.rows.every(row=>row.id!==sessionToken)).toBe(true);
  });
@@ -54,8 +54,8 @@ describe('Server-enforced authorization and privacy boundaries',()=>{
   expect(result.statusCode).toBe(200);expect(result.json().clinicalActionsAllowed).toBe(false);
   const after=(await context.app.inject({url:`/api/episodes/${e.id}`,headers:{cookie:clinician}})).json<{episode:Episode}>().episode;expect(after.version).toBe(e.version);expect(after.closure).toBeNull();expect(after.urgency).toBe('UNREVIEWED');
  });
- it('expires and revokes sessions at the server',async()=>{
-  const temporary=await signIn(context.app,'coordinator');expect((await context.app.inject({method:'POST',url:'/api/auth/logout',headers:{cookie:temporary},payload:{}})).statusCode).toBe(200);
+ it('denies a session after the injected Clerk verifier revokes it',async()=>{
+  const temporary=await signIn(context.app,'coordinator');revokeFixtureSession(context.app,temporary);
   expect((await context.app.inject({url:'/api/workspace',headers:{cookie:temporary}})).statusCode).toBe(401);
  });
 });

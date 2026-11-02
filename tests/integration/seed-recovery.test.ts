@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import {afterAll,beforeAll,describe,it,expect} from 'vitest';
 import pg from 'pg';
 import {randomUUID} from 'node:crypto';
@@ -10,6 +9,7 @@ describe('atomic synthetic seed recovery',()=>{
  beforeAll(async()=>{
   process.env.DEMO_MODE='true';
   const url=new URL(process.env.TEST_DATABASE_URL??'postgresql://careloop:careloop@127.0.0.1:54329/careloop');
+  if(!['localhost','127.0.0.1','[::1]'].includes(url.hostname))throw new Error('Seed recovery requires a local PostgreSQL test database.');
   admin=new pg.Pool({connectionString:url.href});schema=`careloop_seed_${randomUUID().replaceAll('-','')}`;
   await admin.query(`CREATE SCHEMA ${schema}`);url.searchParams.set('options',`-c search_path=${schema}`);db=createDatabase(url.href);await migrate(db);
  });

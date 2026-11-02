@@ -1,9 +1,9 @@
+import { login } from './auth';
 import { test, expect } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 
 test('an interrupted action retries its original idempotency key without duplicating a reminder', async ({ page }) => {
-  const login = await page.request.post('/api/auth/login', { data: { email:'clinician@careloop.demo', password:'CareLoop-Demo-2026!' } });
-  expect(login.ok()).toBe(true);
+  await login(page,'clinician');
   const intake = await page.request.post('/api/fhir/ingest', { data: { source:'ui-reliability-test', eventId:randomUUID(), resource: {
     resourceType:'Observation', id:randomUUID(), meta:{versionId:'1'}, status:'final',
     subject:{reference:'Patient/patient-001'}, code:{coding:[{system:'http://loinc.org',code:'4548-4'}],text:'Synthetic screening result for interruption recovery verification.'},

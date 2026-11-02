@@ -31,6 +31,8 @@ export async function runScenario(db: Db, requestedBy: User, scenarioId: string,
   await service.ingest(clinician, { source: `scenario:${runId}`, eventId: 'patient-1', resource: { resourceType: 'Patient', id: patientId, name: [{ text: patient.name }], birthDate: '1970-01-01' } });
   // These restricted synthetic identities are created only by the authenticated demo administrator.
   await db.pool.query('INSERT INTO users(id,organization_id,email,name,password_hash,role,patient_id) VALUES($1,$2,$3,$4,$5,$6,$7)', [patient.id,patient.organizationId,patient.email,patient.name,'disabled-scenario-account','patient',patientId]);
+  // Scope synthetic execution to this newly created scenario participant only.
+  for(const member of [clinician,coordinator])await db.pool.query('INSERT INTO clinician_patient_relationships(id,organization_id,clinician_id,patient_id,authorization_basis,authorized_by) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),requestedBy.organizationId,member.id,patientId,'Administrator-created synthetic scenario',requestedBy.id]);
   const codes = ['4548-4','2335-8','85354-9'];
   const resource = { resourceType: 'Observation', id: `sim-r-${runId}`, meta: { versionId: '1', lastUpdated: clock() }, status: 'final', subject: { reference: `Patient/${patientId}` }, code: { coding: [{ system: 'http://loinc.org', code: codes[seed % codes.length]!, display: 'Synthetic screening finding' }], text: 'Synthetic source explicitly requests clinician follow-up. No software diagnosis is asserted.' }, effectiveDateTime: clock(), extension: [{url:'https://careloop.demo/fhir/StructureDefinition/follow-up-required',valueBoolean:true}] };
   const intake = { source: `scenario:${runId}`, eventId: 'observation-1', resource };
@@ -42,7 +44,8 @@ export async function runScenario(db: Db, requestedBy: User, scenarioId: string,
   let step = 0;
   const check = (value: unknown, message: string) => { if (!value) violations.push(message); checkpoints.push({type:value?'invariant_pass':'invariant_fail',detail:message}); };
   const command = async (user: User, input: Omit<Command,'expectedVersion'>) => {
-    episode = await service.command(user, episode.id, {...input,expectedVersion:episode.version},`${runId}:${++step}`);
+    await service.command(user, episode.id, {...input,expectedVersion:episode.version},`${runId}:${++step}`);
+    episode=await service.getEpisode(clinician,episode.id);
     return episode;
   };
   const denied = async (operation: () => Promise<unknown>, codes: string[], message: string) => {

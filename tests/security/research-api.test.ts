@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { testApplication, signIn, newEpisode } from '../helpers.ts';
+import { testApplication, signIn,grantPatient, newEpisode } from '../helpers.ts';
 import type { Episode } from '../../packages/contracts/src/careloop.ts';
 
 const sample={syntheticResearchSample:true,features:{days_waiting:4,prior_no_shows:1,contact_attempts:2,referral_rejected:false,patient_acknowledged:true,transport_barrier:false}};
@@ -9,7 +9,7 @@ describe('authorized research API does not gain clinical authority',()=>{
  let context:Awaited<ReturnType<typeof testApplication>>;
  let admin:string,clinician:string,patient:string,episode:Episode;
  beforeAll(async()=>{
-  context=await testApplication();admin=await signIn(context.app,'admin');clinician=await signIn(context.app,'clinician');patient=await signIn(context.app,'patient');episode=await newEpisode(context.app,clinician);
+  context=await testApplication();admin=await signIn(context.app,'admin');clinician=await signIn(context.app,'clinician');patient=await signIn(context.app,'patient');episode=await newEpisode(context.app,clinician);await grantPatient(context.app,episode.patient.id,['user-admin']);
  });
  afterEach(()=>{vi.unstubAllGlobals();vi.unstubAllEnvs();});
  afterAll(async()=>{if(context)await context.close();});

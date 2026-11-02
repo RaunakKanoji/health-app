@@ -16,8 +16,21 @@ export async function seedDatabase(db:Db){
   await seedTransaction(transactionDatabase(tx));
  });
 }
+// Only the fixed, source-identified synthetic fixture receives these initial authorizations.
+// Existing approval decisions and revoked relationships always win on subsequent startup.
+async function seedSyntheticCareTeam(db:Db){
+ for(const [id,email] of [['user-clinician','clinician@careloop.demo'],['user-outsider','outsider@careloop.demo']]){
+  await db.pool.query("INSERT INTO clinician_profiles(user_id,professional_name,specialty,registration_identifier,institution,verification_status,approved_by,approved_at) SELECT id,name,'Synthetic care coordination','SYNTHETIC-'||id,'Synthetic demonstration organization','approved',id,now() FROM users WHERE id=$1 AND email=$2 AND role='clinician' ON CONFLICT(user_id) DO NOTHING",[id,email]);
+ }
+ for(const [id,email] of [['user-clinician','clinician@careloop.demo'],['user-coordinator','coordinator@careloop.demo'],['user-coordinator-2','coordinator2@careloop.demo']]){
+  for(let i=0;i<names.length;i++){
+   const num=String(i+1).padStart(3,'0');
+   await db.pool.query("INSERT INTO clinician_patient_relationships(id,organization_id,clinician_id,patient_id,authorization_basis,authorized_by) SELECT $1,u.organization_id,u.id,p.id,'Fixed synthetic demonstration care team',a.id FROM users u JOIN users a ON a.id='user-admin' AND a.organization_id=u.organization_id AND a.role='admin' JOIN patients p ON p.organization_id=u.organization_id AND p.id=$4 AND p.synthetic=true JOIN patient_identifiers pi ON pi.patient_id=p.id AND pi.organization_id=p.organization_id AND pi.system='https://careloop.demo/synthetic' AND pi.value=$5 WHERE u.id=$2 AND u.email=$3 AND u.organization_id='org-screening' ON CONFLICT(clinician_id,patient_id) DO NOTHING",[randomUUID(),id,email,`patient-${num}`,`SYN-${num}`]);
+  }
+ }
+}
 async function seedTransaction(db:Db){
- const existing=await db.pool.query("SELECT id FROM care_episodes WHERE id='episode-001'");if(existing.rowCount)return;
+ const existing=await db.pool.query("SELECT id FROM care_episodes WHERE id='episode-001'");if(existing.rowCount){await seedSyntheticCareTeam(db);return;}
  const password=hashPassword(DEMO_PASSWORD);
  await db.transaction(async tx=>{
   for(const [id,name] of [['org-screening','Al Noor Screening Network'],['org-receiver','Harbor Specialist Centre'],['org-outsider','Isolated Demonstration Organization']])await tx.query('INSERT INTO organizations(id,name) VALUES($1,$2) ON CONFLICT(id) DO NOTHING',[id,name]);
@@ -34,6 +47,7 @@ async function seedTransaction(db:Db){
   await tx.query("INSERT INTO role_assignments(id,organization_id,user_id,role) SELECT 'role-'||id,organization_id,id,role FROM users ON CONFLICT(organization_id,user_id,role) DO NOTHING");
   for(const p of policies){await tx.query('INSERT INTO clinical_policies(id,pathway) VALUES($1,$2) ON CONFLICT(id) DO NOTHING',[p.id,p.pathway]);await tx.query('INSERT INTO policy_versions(id,policy_id,version,approval_status,document) VALUES($1,$2,$3,$4,$5) ON CONFLICT(policy_id,version) DO NOTHING',[`${p.id}:${p.version}`,p.id,p.version,p.approvalStatus,JSON.stringify(p)]);}
  });
+ await seedSyntheticCareTeam(db);
  const base=Date.now();let time=base-14*86400000;const service=new WorkflowService(db,()=>new Date(time).toISOString());
  const clinician=(await service.user('user-clinician'))!,coordinator=(await service.user('user-coordinator'))!,receiver=(await service.user('user-receiver'))!;
  for(let i=0;i<names.length;i++){

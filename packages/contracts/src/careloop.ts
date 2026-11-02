@@ -2,13 +2,13 @@ import { z } from 'zod';
 
 export const roles = ['clinician', 'coordinator', 'patient', 'receiver', 'admin'] as const;
 export type Role = typeof roles[number];
-export type User = { id: string; name: string; email: string; role: Role; organizationId: string; patientId: string | null };
+export type User = { id: string; name: string; email: string; role: Role; organizationId: string; patientId: string | null; clerkUserId?: string | null; accountStatus?: 'active' | 'suspended' | 'deleted'; onboardingCompleted?: boolean; clinicianStatus?: 'pending' | 'approved' | 'rejected' | null };
 export type Organization = { id: string; name: string };
 export const phases = ['RESULT_RECEIVED', 'CLINICAL_REVIEW', 'PATIENT_CONTACT', 'CARE_COORDINATION', 'OUTCOME_VERIFICATION', 'CLOSED'] as const;
 export type Phase = typeof phases[number];
 export type OperationalStatus = 'ACTIVE' | 'BLOCKED' | 'OVERDUE' | 'CLOSED' | 'REOPENED';
 export type Pathway = 'diabetes' | 'colorectal' | 'hypertension';
-export type Patient = { id: string; name: string; birthDate: string; language: 'en' | 'ar'; synthetic: true; communicationConsent: boolean };
+export type Patient = { id: string; name: string; birthDate: string; language: 'en' | 'hi' | 'ar'; synthetic: true; communicationConsent: boolean };
 export type EpisodeEvent = { id: string; type: string; at: string; actorId: string; actorName: string; detail: string; version: number };
 export type Task = { id: string; type: string; title: string; status: 'OPEN' | 'DONE'; dueAt: string | null };
 export type Referral = { id: string; resultRevision: number; receivingOrganizationId: string; receivingOrganizationName: string; status: 'REQUESTED' | 'ACCEPTED' | 'REJECTED'; reason: string; createdAt: string; respondedAt: string | null };
@@ -21,10 +21,10 @@ export type Episode = {
   phase: Phase; status: OperationalStatus; version: number; ownerId: string | null; ownerName: string | null;
   createdAt: string; updatedAt: string; dueAt: string | null; urgency: 'UNREVIEWED' | 'ROUTINE' | 'URGENT';
   result: { id: string; summary: string; sourceId: string; issuedAt: string; status: 'final' | 'amended' | 'corrected'; revision: number };
-  review: { clinicianId: string; reviewedAt: string; note: string; patientExplanation: string; policyVersion: string } | null;
+  review: { clinicianId: string; reviewedAt: string; note?: string; patientExplanation: string; policyVersion: string } | null;
   acknowledgedAt: string | null; referrals: Referral[]; appointments: Appointment[]; communications: Communication[];
   evidence: Evidence[]; tasks: Task[]; events: EpisodeEvent[];
-  closure: { clinicianId: string; at: string; note: string; evidenceIds: string[]; policyVersion: string } | null;
+  closure: { clinicianId: string; at: string; note?: string; evidenceIds: string[]; policyVersion: string } | null;
   ownershipTransfer: { requestedBy: string; targetUserId: string; targetName: string; status: 'PENDING' | 'ACCEPTED' | 'REJECTED'; reason: string } | null;
 };
 export const actionTypes = ['review','send_message','acknowledge','create_referral','accept_referral','reject_referral','schedule_appointment','complete_appointment','no_show','add_evidence','verify_evidence','close','reopen','request_transfer','accept_transfer','reject_transfer','request_help','update_consent','mark_overdue','block','correct_result'] as const;

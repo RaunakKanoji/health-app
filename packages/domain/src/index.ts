@@ -18,18 +18,22 @@ export const policies: Policy[] = (['diabetes', 'colorectal', 'hypertension'] as
 }));
 
 export function canReadEpisode(actor: User, episode: Episode, shared: boolean): boolean {
+  if (actor.accountStatus !== undefined && actor.accountStatus !== 'active') return false;
+  if (actor.onboardingCompleted === false) return false;
   if (actor.role === 'patient') return actor.organizationId === episode.organizationId && actor.patientId === episode.patient.id;
   if (actor.role === 'receiver') return shared && episode.referrals.some(r => r.receivingOrganizationId === actor.organizationId);
-  return actor.organizationId === episode.organizationId;
+  if (actor.role === 'admin') return shared && actor.organizationId === episode.organizationId;
+  if (actor.role === 'clinician' && actor.clinicianStatus !== undefined && actor.clinicianStatus !== 'approved') return false;
+  return shared && actor.organizationId === episode.organizationId && ['clinician','coordinator'].includes(actor.role);
 }
 export { closureGaps } from './closure.ts';
 import { closureGaps } from './closure.ts';
 export type TransitionContext = { now: string; targetUser?: User; receivingOrganizationName?: string; shared: boolean; worker?: boolean };
 export function transition(current: Episode, actor: User, command: Command, context: TransitionContext): Episode {
-  requireValue(canReadEpisode(actor,current,context.shared), 'This record is unavailable.', 'FORBIDDEN');
+  requireValue((context.worker === true && command.type === 'mark_overdue' && actor.role === 'admin' && actor.organizationId === current.organizationId) || canReadEpisode(actor,current,context.shared), 'This record is unavailable.', 'FORBIDDEN');
   requireValue(current.version === command.expectedVersion, 'This episode changed. Refresh before retrying.', 'VERSION_CONFLICT');
   const e = structuredClone(current);
-  const ownStaff = actor.organizationId===e.organizationId && ['clinician','coordinator','admin'].includes(actor.role);
+  const ownStaff = actor.organizationId===e.organizationId && ['clinician','coordinator'].includes(actor.role);
   const clinician = actor.organizationId===e.organizationId && actor.role==='clinician';
   const receiver = actor.role==='receiver' && context.shared;
   const patient = actor.role==='patient' && actor.patientId===e.patient.id;
@@ -118,7 +122,7 @@ export function transition(current: Episode, actor: User, command: Command, cont
       allowed(patient);need(typeof command.consent==='boolean','Specify optional communication consent.');e.patient.communicationConsent=command.consent!;if(command.language)e.patient.language=command.language;detail=`Optional email/SMS consent ${command.consent?'granted':'revoked'}.`;
       if(!command.consent)e.communications.filter(c=>c.status==='QUEUED'&&c.channel!=='portal').forEach(c=>{c.status='CANCELLED';});break;
     case 'mark_overdue':
-      allowed(context.worker&&ownStaff);need(e.dueAt&&Date.parse(e.dueAt)<Date.parse(context.now),'The clinician-assigned deadline has not elapsed.');need(e.status!=='OVERDUE','This episode is already overdue.');e.status='OVERDUE';addTask('overdue','Clinician-assigned deadline elapsed; accountable owner must review');detail='Overdue escalation; clinical urgency unchanged.';break;
+      allowed(context.worker&&actor.role==='admin'&&actor.organizationId===e.organizationId);need(e.dueAt&&Date.parse(e.dueAt)<Date.parse(context.now),'The clinician-assigned deadline has not elapsed.');need(e.status!=='OVERDUE','This episode is already overdue.');e.status='OVERDUE';addTask('overdue','Clinician-assigned deadline elapsed; accountable owner must review');detail='Overdue escalation; clinical urgency unchanged.';break;
     case 'block':allowed(ownStaff);need(note.length>=5,'Record the barrier requiring intervention.');e.status='BLOCKED';addTask('barrier','Resolve documented care coordination barrier');break;
     case 'correct_result':
       allowed(context.worker&&ownStaff);need(command.content,'A corrected source result is required.'); e.result.summary=command.content!;e.result.status='corrected';e.result.revision++;e.review=null;e.closure=null;e.phase='CLINICAL_REVIEW';e.status='REOPENED';e.acknowledgedAt=null;e.evidence.forEach(v=>{v.verifiedBy=null;v.verifiedAt=null;});addTask('clinical_review','Review corrected source result; previous approval is superseded');break;

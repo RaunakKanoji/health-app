@@ -17,6 +17,7 @@
     "db:stop": "tsx scripts/local-postgres.ts stop",
     "db:migrate": "tsx --env-file=.env packages/db/src/migrate.ts",
     "db:seed": "tsx --env-file=.env scripts/seed/index.ts",
+    "identity:provision": "tsx --env-file=.env scripts/provision-identity.ts",
     "demo:setup": "tsx scripts/setup.ts",
     "demo:reset": "tsx --env-file=.env scripts/reset-demo.ts",
     "import:synthea": "tsx --env-file=.env scripts/import-synthea.ts",
@@ -30,6 +31,7 @@
     "benchmark": "tsx --env-file=.env scripts/evaluate/performance.ts"
   },
   "dependencies": {
+    "@clerk/backend": "^3.26.5",
     "@fastify/cookie": "^11.0.2",
     "@fastify/helmet": "^13.0.2",
     "@fastify/rate-limit": "^10.3.0",
@@ -42,6 +44,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
+    "@clerk/testing": "^2.2.53",
     "@eslint/js": "^9.39.0",
     "@playwright/test": "^1.56.1",
     "@types/node": "^24.10.0",

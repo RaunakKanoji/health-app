@@ -11,12 +11,11 @@ Requirements: Node.js 24+, pnpm 11.12.0, and PostgreSQL 17+ binaries or Docker.
 ```sh
 pnpm install --frozen-lockfile
 pnpm demo:setup
-pnpm dev
 ```
 
-Open **http://localhost:3000**. Use this hostname for the original prototype. Setup creates a local PostgreSQL database, applies four migrations and seeds synthetic records. The web app, Fastify API and worker run together.
+Configure the selected Clerk development application using [authentication setup](docs/authentication/clerk-setup.md), then run `pnpm dev` and open **http://localhost:3001**. Setup creates a local PostgreSQL database, applies five migrations and seeds synthetic records. The web app, Fastify API (port 4001) and worker run together.
 
-Synthetic accounts: `clinician@careloop.demo`, `coordinator@careloop.demo`, `patient@careloop.demo`, `receiver@careloop.demo`, `admin@careloop.demo`. All use **`CareLoop-Demo-2026!`**. These public credentials are for local synthetic use only. `DEMO_MODE=true` is required.
+Authentication uses Clerk. Public registration leads to patient onboarding or a clinician access request; clinicians need demo approval and explicit patient assignments. Existing synthetic user IDs and records are preserved, but old demo passwords and sessions no longer authenticate. Trusted operators explicitly link existing accounts using `pnpm identity:provision`; see the setup guide. `DEMO_MODE=true` is required.
 
 Docker alternative: copy `.env.example` to `.env`, run `docker compose up -d postgres`, then `pnpm db:migrate`, `pnpm db:seed`, and `pnpm dev`.
 
@@ -44,4 +43,4 @@ pnpm evaluate
 
 Database tests use isolated schemas in the local demonstration database unless `TEST_DATABASE_URL` is explicitly configured. Optional Python service setup is documented in `services/ml/README.md`.
 
-The application code is preserved from the original implementation. The only packaging changes are this README and removal of two legacy specification/governance commands and their CI step, whose archived inputs are intentionally excluded. No later bug fixes or feature additions are included. FHIR validation is a structural subset, outbound messaging is simulated, evidence uploads are plain text, and production identity, privacy controls, clinical policy approval and live integrations remain future work.
+The original clinical workspaces and workflows are retained. The Clerk migration adds identity synchronization, patient and clinician onboarding, administration, record-level access checks and patient-specific responses; see [implementation and verification](docs/authentication/README.md). Authentication screens support English and Hindi; the broader workspace translation work is separate. FHIR validation remains a structural subset, outbound messaging is simulated and evidence uploads are plain text. Production deployment, clinical policy approval, regulatory agreements and live integrations remain future work.
