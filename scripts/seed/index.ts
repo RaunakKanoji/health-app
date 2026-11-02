@@ -39,7 +39,7 @@ async function seedTransaction(db:Db){
   for(const [id,role,name,org] of staff){const email=id==='user-outsider'?'outsider@careloop.demo':id==='user-coordinator-2'?'coordinator2@careloop.demo':`${role}@careloop.demo`;await tx.query('INSERT INTO users(id,organization_id,email,name,password_hash,role) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO NOTHING',[id,org,email,name,password,role]);}
   for(let i=0;i<names.length;i++){
    const num=String(i+1).padStart(3,'0'),patientId=`patient-${num}`,userId=i===0?'user-patient':`user-patient-${num}`;
-   await tx.query('INSERT INTO patients(id,organization_id,name,birth_date,language) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO NOTHING',[patientId,'org-screening',names[i],`${1964+i}-0${i%9+1}-15`,i%4===0?'ar':'en']);
+   await tx.query('INSERT INTO patients(id,organization_id,name,birth_date,language) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO NOTHING',[patientId,'org-screening',names[i],`${1964+i}-0${i%9+1}-15`,i%4===0?'hi':'en']);
    await tx.query('INSERT INTO users(id,organization_id,email,name,password_hash,role,patient_id) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(id) DO NOTHING',[userId,'org-screening',i===0?'patient@careloop.demo':`patient${num}@careloop.demo`,names[i],password,'patient',patientId]);
    await tx.query('INSERT INTO patient_identifiers(id,organization_id,patient_id,system,value) VALUES($1,$2,$3,$4,$5) ON CONFLICT(organization_id,system,value) DO NOTHING',[randomUUID(),'org-screening',patientId,'https://careloop.demo/synthetic',`SYN-${num}`]);
    await tx.query('INSERT INTO patient_consents(id,organization_id,patient_id,purpose,granted,actor_id) VALUES($1,$2,$3,$4,true,$5)',[randomUUID(),'org-screening',patientId,'optional_communications',userId]);
