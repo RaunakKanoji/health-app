@@ -2,7 +2,9 @@ import { mkdir,writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { buildApp } from '../../apps/api/src/app.ts';
 import { runScenario,scenarioCatalog,type ScenarioRun } from '../../apps/api/src/scenarios.ts';
+import { readConfig, assertDevelopmentDatabase } from '../../packages/config/src/index.ts';
 
+assertDevelopmentDatabase(readConfig());
 const args=process.argv.slice(2);
 const arg=(name:string)=>args[args.indexOf(name)+1];
 const seed=args.includes('--seed')?Number(arg('--seed')):2026;

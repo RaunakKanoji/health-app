@@ -2,15 +2,15 @@ import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import type { Db } from '../../packages/db/src/index.ts';
 import { createDatabase, migrate, transactionDatabase } from '../../packages/db/src/index.ts';
-import { hashPassword } from '../../packages/auth/src/index.ts';
 import { policies } from '../../packages/domain/src/index.ts';
 import { WorkflowService } from '../../packages/workflows/src/service.ts';
 import type { User, Command } from '../../packages/contracts/src/careloop.ts';
-import { readConfig } from '../../packages/config/src/index.ts';
+import { readConfig, assertDevelopmentDatabase, migrationConnection } from '../../packages/config/src/index.ts';
 export const DEMO_PASSWORD='CareLoop-Demo-2026!';
 const names=['Amal Al Mansoori','Omar Hassan','Layla Ibrahim','Yousef Khalid','Maryam Nasser','Ali Saeed','Sara Ahmed','Khalid Rashid','Fatima Noor','Hamad Salim','Noura Faisal','Zayed Abdullah','Aisha Karim','Rashid Jamal','Hana Farid','Saeed Tariq'];
 export async function seedDatabase(db:Db){
  if(process.env.DEMO_MODE!=='true')throw new Error('Seeding requires explicit DEMO_MODE=true.');
+ if(process.env.DATABASE_ENVIRONMENT&& !['development','test'].includes(process.env.DATABASE_ENVIRONMENT))throw new Error('Seeding is restricted to development and test environments.');
  await db.transaction(async tx=>{
   await tx.query("SELECT pg_advisory_xact_lock(hashtext('careloop-seed'))");
   await seedTransaction(transactionDatabase(tx));
@@ -31,7 +31,8 @@ async function seedSyntheticCareTeam(db:Db){
 }
 async function seedTransaction(db:Db){
  const existing=await db.pool.query("SELECT id FROM care_episodes WHERE id='episode-001'");if(existing.rowCount){await seedSyntheticCareTeam(db);return;}
- const password=hashPassword(DEMO_PASSWORD);
+ // Clerk owns credentials. Retain existing legacy hashes; new fixtures have none.
+ const password=null;
  await db.transaction(async tx=>{
   for(const [id,name] of [['org-screening','Al Noor Screening Network'],['org-receiver','Harbor Specialist Centre'],['org-outsider','Isolated Demonstration Organization']])await tx.query('INSERT INTO organizations(id,name) VALUES($1,$2) ON CONFLICT(id) DO NOTHING',[id,name]);
   const staff=[['user-clinician','clinician','Dr. Leila Hassan','org-screening'],['user-coordinator','coordinator','Nadia Al Farsi','org-screening'],['user-admin','admin','Demo Administrator','org-screening'],['user-receiver','receiver','Harbor Referral Desk','org-receiver'],['user-outsider','clinician','Isolated Clinician','org-outsider'],['user-coordinator-2','coordinator','Samir Ahmed','org-screening']];
@@ -70,4 +71,4 @@ async function seedTransaction(db:Db){
  }
  await service.tick(new Date(base).toISOString());
 }
-if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){const config=readConfig();const db=createDatabase(config.DATABASE_URL);try{await migrate(db);await seedDatabase(db);process.stdout.write('Synthetic CareLoop seed is ready.\n');}finally{await db.close();}}
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){const config=readConfig();assertDevelopmentDatabase(config);const db=createDatabase(migrationConnection(config));try{await migrate(db);await seedDatabase(db);process.stdout.write('Synthetic CareLoop seed is ready.\n');}finally{await db.close();}}

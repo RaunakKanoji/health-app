@@ -8,6 +8,7 @@ describe('atomic synthetic seed recovery',()=>{
  let db:Db,admin:pg.Pool,schema:string;
  beforeAll(async()=>{
   process.env.DEMO_MODE='true';
+  process.env.DATABASE_ENVIRONMENT='test';
   const url=new URL(process.env.TEST_DATABASE_URL??'postgresql://careloop:careloop@127.0.0.1:54329/careloop');
   if(!['localhost','127.0.0.1','[::1]'].includes(url.hostname))throw new Error('Seed recovery requires a local PostgreSQL test database.');
   admin=new pg.Pool({connectionString:url.href});schema=`careloop_seed_${randomUUID().replaceAll('-','')}`;

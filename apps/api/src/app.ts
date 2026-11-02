@@ -4,8 +4,8 @@ import rateLimit from '@fastify/rate-limit';
 import helmet from '@fastify/helmet';
 import { z, ZodError } from 'zod';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
-import { createDatabase, migrate, type Db } from '../../../packages/db/src/index.ts';
-import { readConfig } from '../../../packages/config/src/index.ts';
+import { createDatabase, migrate, requireMigrations, verifyDatabase, type Db } from '../../../packages/db/src/index.ts';
+import { readConfig, parseConfig, allowLocalBootstrap, databaseEndpoint, isLocalDatabase } from '../../../packages/config/src/index.ts';
 import { WorkflowService } from '../../../packages/workflows/src/service.ts';
 import { IdentityService } from '../../../packages/auth/src/identity.ts';
 import { createClerkIdentityVerifier, type IdentityVerifier } from '../../../packages/auth/src/clerk.ts';
@@ -15,16 +15,24 @@ import { seedDatabase } from '../../../scripts/seed/index.ts';
 import { registerScenarioRoutes } from './scenarios.ts';
 import { registerMlRoutes } from './ml.ts';
 import { registerIdentityRoutes } from './identity.ts';
+import { registerClinicalRecordRoutes } from './clinical-records.ts';
+import { registerDocumentRoutes } from './documents.ts';
+import type { PrivateDocumentStore } from '../../../packages/workflows/src/medical-documents.ts';
 export type CareLoopApp = FastifyInstance & {db:Db;service:WorkflowService;identity:IdentityService;authenticate:(request:FastifyRequest)=>Promise<User>};
-export type AppOptions={databaseUrl?:string;seed?:boolean;clock?:()=>string;demoMode?:boolean;identityVerifier?:IdentityVerifier};
+export type AppOptions={databaseUrl?:string;seed?:boolean;clock?:()=>string;demoMode?:boolean;identityVerifier?:IdentityVerifier;documentStore?:PrivateDocumentStore|null};
 export async function buildApp(options:AppOptions={}):Promise<CareLoopApp>{
- const config=readConfig();if(options.demoMode===false)throw new Error('This prototype requires explicit synthetic demonstration mode.');
+ const config=options.databaseUrl?parseConfig({...process.env,DATABASE_URL:options.databaseUrl,DATABASE_DIRECT_URL:undefined,DATABASE_URL_UNPOOLED:undefined,DATABASE_RUNTIME_URL:undefined,DATABASE_ENVIRONMENT:isLocalDatabase(databaseEndpoint(options.databaseUrl))?'test':process.env.DATABASE_ENVIRONMENT}):readConfig();if(options.demoMode===false)throw new Error('This prototype requires explicit synthetic demonstration mode.');
  const allowedOrigins=new Set([new URL(config.APP_ORIGIN).origin]);
  const loopback=new URL(config.APP_ORIGIN);
  if(loopback.protocol==='http:'&&['localhost','127.0.0.1'].includes(loopback.hostname)){
   loopback.hostname=loopback.hostname==='localhost'?'127.0.0.1':'localhost';allowedOrigins.add(loopback.origin);
  }
- const db=createDatabase(options.databaseUrl??config.DATABASE_URL);await migrate(db);if(options.seed!==false)await seedDatabase(db);
+ const databaseUrl=options.databaseUrl??config.DATABASE_RUNTIME_URL??config.DATABASE_URL;
+ const db=createDatabase(databaseUrl,{max:config.DATABASE_POOL_MAX});
+ try{
+  if(allowLocalBootstrap({...config,DATABASE_URL:databaseUrl})){await migrate(db);if(options.seed!==false)await seedDatabase(db);}
+  else await requireMigrations(db);
+ }catch(error){await db.close();throw error;}
  const app=Fastify({logger:false,bodyLimit:1024*1024,trustProxy:false}) as unknown as CareLoopApp;
  const service=new WorkflowService(db,options.clock);
  const identity=new IdentityService(db,{verifyIdentity:options.identityVerifier??createClerkIdentityVerifier(config),organizationId:config.DEFAULT_ORGANIZATION_ID});
@@ -51,7 +59,8 @@ export async function buildApp(options:AppOptions={}):Promise<CareLoopApp>{
   process.stderr.write(JSON.stringify({level:'error',event:'request_failed',requestId:request.id,code:'INTERNAL_ERROR'})+'\n');
   return reply.code(500).send({error:{code:'INTERNAL_ERROR',message:'The request could not be completed. Retry or contact the care team.',requestId:request.id}});
  });
- app.get('/api/health',async()=>{await db.pool.query('SELECT 1');return {status:'ok',mode:'synthetic-demo',database:'postgresql',externalMessaging:false};});
+ app.get('/api/health',async(_request,reply)=>{const health=await verifyDatabase(db);return reply.code(health.status==='ok'?200:503).send(health);});
+ app.get('/api/health/database',async(request,reply)=>{await app.authenticate(request);const health=await verifyDatabase(db);return reply.code(health.status==='ok'?200:503).send(health);});
  app.post('/api/auth/login',async()=>{throw new DomainError('CLERK_REQUIRED','Sign in through the Clerk sign-in page.',410);});
  app.get('/api/auth/me',async request=>({user:await app.authenticate(request)}));
  app.post('/api/auth/logout',async()=>{throw new DomainError('CLERK_REQUIRED','Sign out using the Clerk account control.',410);});
@@ -85,5 +94,7 @@ export async function buildApp(options:AppOptions={}):Promise<CareLoopApp>{
  await registerScenarioRoutes(app);
  await registerMlRoutes(app);
  await registerIdentityRoutes(app,identity);
+ await registerClinicalRecordRoutes(app);
+ await registerDocumentRoutes(app,options.documentStore);
  return app;
 }
