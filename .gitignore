@@ -25,3 +25,4 @@ services/ml/artifacts/
 
 # Local Clerk linking/claim material
 .clerk/
+.neon

@@ -4,13 +4,20 @@ import { buildApp, type CareLoopApp } from '../apps/api/src/app.ts';
 import { DomainError } from '../packages/domain/src/index.ts';
 import type { IdentityVerifier, VerifiedIdentity } from '../packages/auth/src/clerk.ts';
 import type { Command, Episode } from '../packages/contracts/src/careloop.ts';
+import type { PrivateDocumentStore } from '../packages/workflows/src/medical-documents.ts';
 
 const sessions=new WeakMap<CareLoopApp,Map<string,VerifiedIdentity>>();
-export async function testApplication() {
+export async function testApplication(options:{documentStore?:PrivateDocumentStore|null}={}) {
   process.env.DEMO_MODE='true';
   process.env.WORKER_SECRET??='test-only-worker-key-at-least-thirty-two-characters';
   const url=new URL(process.env.TEST_DATABASE_URL??'postgresql://careloop:careloop@127.0.0.1:54329/careloop');
   if(!['localhost','127.0.0.1','[::1]'].includes(url.hostname))throw new Error('Integration fixtures require an explicit local PostgreSQL test database.');
+  // Config validation and bootstrap must never inherit a developer's live Neon target.
+  process.env.DATABASE_ENVIRONMENT='test';
+  process.env.DATABASE_URL=url.href;
+  process.env.DATABASE_DIRECT_URL=url.href;
+  process.env.DATABASE_URL_UNPOOLED=url.href;
+  delete process.env.DATABASE_RUNTIME_URL;
   const admin=new pg.Pool({connectionString:url.href});
   const schema=`careloop_test_${randomUUID().replaceAll('-','')}`;
   await admin.query(`CREATE SCHEMA ${schema}`);
@@ -18,7 +25,7 @@ export async function testApplication() {
   const registry=new Map<string,VerifiedIdentity>();
   const identityVerifier:IdentityVerifier=async request=>{const identity=registry.get(request.cookies.__session??'');if(!identity)throw new DomainError('UNAUTHENTICATED','Sign in to access CareLoop.',401);return identity;};
   let app:CareLoopApp;
-  try { app=await buildApp({databaseUrl:url.href,identityVerifier});await app.ready();sessions.set(app,registry); }
+  try { app=await buildApp({databaseUrl:url.href,identityVerifier,documentStore:options.documentStore??null});await app.ready();sessions.set(app,registry); }
   catch(error) {await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();throw error;}
   return {app,schema,async close(){await app.close();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();}};
 }

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, jsonb, integer } from 'drizzle-orm/pg-core';
-import type { Episode } from '../../contracts/src/careloop.ts';
-export const organizations = pgTable('organizations',{id:text('id').primaryKey(),name:text('name').notNull(),createdAt:timestamp('created_at',{withTimezone:true}).defaultNow().notNull()});
-export const careEpisodes = pgTable('care_episodes',{id:text('id').primaryKey(),organizationId:text('organization_id').notNull().references(()=>organizations.id),patientId:text('patient_id').notNull(),resultId:text('result_id').notNull(),phase:text('phase').notNull(),status:text('status').notNull(),ownerId:text('owner_id'),dueAt:timestamp('due_at',{withTimezone:true}),version:integer('version').notNull(),snapshot:jsonb('snapshot').$type<Episode>().notNull(),createdAt:timestamp('created_at',{withTimezone:true}).notNull(),updatedAt:timestamp('updated_at',{withTimezone:true}).notNull()});
+// SQL migrations remain authoritative; these exports provide typed database queries.
+export * from './schema/core.ts';
+export * from './schema/identity.ts';
+export * from './schema/longitudinal.ts';

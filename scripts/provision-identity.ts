@@ -1,6 +1,6 @@
 import { parseArgs } from 'node:util';
 import { createClerkClient } from '@clerk/backend';
-import { createDatabase, migrate } from '../packages/db/src/index.ts';
+import { createDatabase, requireMigrations } from '../packages/db/src/index.ts';
 import { readConfig } from '../packages/config/src/index.ts';
 import { provisionClerkIdentity, verifyMissingClerkUser } from '../packages/auth/src/provision.ts';
 import { DomainError } from '../packages/domain/src/index.ts';
@@ -23,7 +23,7 @@ async function main(){
   const replacement=oldClerkId?{expectedClerkUserId:oldClerkId,absence:await verifyMissingClerkUser(oldClerkId,id=>client.users.getUser(id))}:undefined;
   const db=createDatabase(config.DATABASE_URL);
   try{
-    await migrate(db);
+    await requireMigrations(db);
     const result=await provisionClerkIdentity(db,{userId:values.user,identity:{clerkUserId:user.id,email:email.emailAddress,name:user.fullName||user.firstName||'CareLoop user',emailVerified:true,updatedAt:user.updatedAt},administrator:values.role==='admin',apply:values.apply,replacement});
     process.stdout.write(JSON.stringify(result,null,2)+'\n');
   }finally{await db.close();}

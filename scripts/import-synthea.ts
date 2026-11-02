@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { buildApp } from '../apps/api/src/app.ts';
 import { supportedResourceTypes } from '../packages/fhir/src/index.ts';
+import { readConfig, assertDevelopmentDatabase } from '../packages/config/src/index.ts';
 
+assertDevelopmentDatabase(readConfig());
 type Resource={resourceType:string;id:string;[key:string]:unknown};
 const file=process.argv[2]??'data/fixtures/synthea-r4-bundle.json';
 const bundle=JSON.parse(readFileSync(file,'utf8')) as {resourceType:string;entry?:{fullUrl?:string;resource:Resource}[]};

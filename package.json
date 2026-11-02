@@ -28,13 +28,21 @@
     "build": "turbo run build",
     "simulate": "tsx --env-file=.env scripts/simulate/index.ts",
     "evaluate": "tsx --env-file=.env scripts/evaluate/index.ts",
-    "benchmark": "tsx --env-file=.env scripts/evaluate/performance.ts"
+    "benchmark": "tsx --env-file=.env scripts/evaluate/performance.ts",
+    "db:check": "tsx --env-file=.env packages/db/src/check.ts",
+    "db:seed:clinical": "tsx --env-file=.env scripts/seed/clinical-journey.ts",
+    "db:provision-runtime": "node --import tsx scripts/provision-runtime-database.ts",
+    "db:transfer-local": "node --import tsx scripts/migrate-local-to-neon.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1161.0",
+    "@aws-sdk/s3-request-presigner": "^3.1161.0",
     "@clerk/backend": "^3.26.5",
     "@fastify/cookie": "^11.0.2",
     "@fastify/helmet": "^13.0.2",
     "@fastify/rate-limit": "^10.3.0",
+    "@neon/config": "^1.10.0",
+    "@neon/env": "^1.6.8",
     "@opentelemetry/api": "^1.9.0",
     "dotenv": "^17.2.3",
     "drizzle-orm": "0.45.4",
