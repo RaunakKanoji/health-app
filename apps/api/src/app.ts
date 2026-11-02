@@ -17,9 +17,11 @@ import { registerMlRoutes } from './ml.ts';
 import { registerIdentityRoutes } from './identity.ts';
 import { registerClinicalRecordRoutes } from './clinical-records.ts';
 import { registerDocumentRoutes } from './documents.ts';
+import {registerDocumentManagementRoutes} from './document-management.ts';
+import type {DocumentStorage} from '../../../packages/workflows/src/documents/storage.ts';
 import type { PrivateDocumentStore } from '../../../packages/workflows/src/medical-documents.ts';
 export type CareLoopApp = FastifyInstance & {db:Db;service:WorkflowService;identity:IdentityService;authenticate:(request:FastifyRequest)=>Promise<User>};
-export type AppOptions={databaseUrl?:string;seed?:boolean;clock?:()=>string;demoMode?:boolean;identityVerifier?:IdentityVerifier;documentStore?:PrivateDocumentStore|null};
+export type AppOptions={databaseUrl?:string;seed?:boolean;clock?:()=>string;demoMode?:boolean;identityVerifier?:IdentityVerifier;documentStore?:PrivateDocumentStore|null;documentManagementStorage?:DocumentStorage|null};
 export async function buildApp(options:AppOptions={}):Promise<CareLoopApp>{
  const config=options.databaseUrl?parseConfig({...process.env,DATABASE_URL:options.databaseUrl,DATABASE_DIRECT_URL:undefined,DATABASE_URL_UNPOOLED:undefined,DATABASE_RUNTIME_URL:undefined,DATABASE_ENVIRONMENT:isLocalDatabase(databaseEndpoint(options.databaseUrl))?'test':process.env.DATABASE_ENVIRONMENT}):readConfig();if(options.demoMode===false)throw new Error('This prototype requires explicit synthetic demonstration mode.');
  const allowedOrigins=new Set([new URL(config.APP_ORIGIN).origin]);
@@ -96,5 +98,6 @@ export async function buildApp(options:AppOptions={}):Promise<CareLoopApp>{
  await registerIdentityRoutes(app,identity);
  await registerClinicalRecordRoutes(app);
  await registerDocumentRoutes(app,options.documentStore);
+ await registerDocumentManagementRoutes(app,{storage:options.documentManagementStorage});
  return app;
 }

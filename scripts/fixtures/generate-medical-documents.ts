@@ -1,0 +1,11 @@
+import {mkdir,readFile,writeFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+import {syntheticDocumentFixtures} from '../../packages/workflows/src/documents/synthetic-fixtures.ts';
+const directory=new URL('../../tests/fixtures/medical-documents/',import.meta.url);
+await mkdir(directory,{recursive:true});
+for(const fixture of Object.values(syntheticDocumentFixtures))await writeFile(new URL(fixture.filename,directory),fixture.bytes);
+const raster=await readFile(new URL('synthetic-scanned.png',directory));
+const fixtures=Object.values(syntheticDocumentFixtures).map(({filename,mimeType,sha256,bytes})=>({filename,mimeType:mimeType as string,sha256,bytes:bytes.length}));
+fixtures.push({filename:'synthetic-scanned.png',mimeType:'image/png',sha256:createHash('sha256').update(raster).digest('hex'),bytes:raster.length});
+await writeFile(new URL('manifest.json',directory),JSON.stringify({synthetic:true,containsRealPatientData:false,fixtures},null,2)+'\n');
+console.log(`Generated ${Object.keys(syntheticDocumentFixtures).length} synthetic medical PDF fixtures.`);

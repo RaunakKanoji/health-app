@@ -1,6 +1,8 @@
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
 import {createHash,randomUUID} from 'node:crypto';
-import {createDocumentStore,type PrivateDocumentStore} from '../../packages/workflows/src/medical-documents.ts';
+import {createDocumentStore,MedicalDocumentService,documentUploadSchema,type PrivateDocumentStore} from '../../packages/workflows/src/medical-documents.ts';
+import {DomainError} from '../../packages/domain/src/index.ts';
+import {ZodError} from 'zod';
 import {grantPatient,signIn,testApplication} from '../helpers.ts';
 
 describe('private medical documents',()=>{
@@ -10,7 +12,17 @@ describe('private medical documents',()=>{
   let fail=false;
   const store:PrivateDocumentStore={provider:'private-test-fixture',async put(input){if(fail)throw new Error('secret-storage-debug');uploaded.set(input.key,input);},async download(input){downloads.push(input);return `https://private-storage.example.test/${input.key}?temporary=synthetic`;}};
   const payload={documentType:'laboratory_report',filename:'synthetic-report.txt',mimeType:'text/plain',contentBase64:Buffer.from('Synthetic laboratory report; not medical advice.').toString('base64')};
-  const upload=(cookie:string,patientId='patient-001',body:Record<string,unknown>=payload,key=randomUUID())=>ctx.app.inject({method:'POST',url:`/api/patients/${patientId}/documents`,headers:{cookie,'idempotency-key':key},payload:body});
+  // Legacy fixture construction is internal; the old HTTP write route is retired.
+  const upload=async(cookie:string,patientId='patient-001',body:Record<string,unknown>=payload,key=randomUUID())=>{
+    try {
+      const user=(await ctx.app.inject({url:'/api/auth/me',headers:{cookie}})).json().user;
+      const result={document:await new MedicalDocumentService(ctx.app.db,store).upload(user,patientId,documentUploadSchema.parse(body),key)};
+      return {statusCode:200,body:JSON.stringify(result),json:()=>result as {document:{id:string;filename:string};error?:{code:string}}};
+    } catch(error) {
+      const result={error:{code:error instanceof DomainError?error.code:'INVALID_INPUT',message:error instanceof DomainError?error.message:'Invalid input'}};
+      return {statusCode:error instanceof DomainError?error.status:error instanceof ZodError?422:500,body:JSON.stringify(result),json:()=>result as unknown as {document:{id:string;filename:string};error?:{code:string}}};
+    }
+  };
   const get=(cookie:string,patientId='patient-001')=>ctx.app.inject({url:`/api/patients/${patientId}/documents`,headers:{cookie}});
   const download=(cookie:string,id:string,patientId='patient-001')=>ctx.app.inject({method:'POST',url:`/api/patients/${patientId}/documents/${id}/download`,headers:{cookie},payload:{}});
   beforeAll(async()=>{ctx=await testApplication({documentStore:store});patient=await signIn(ctx.app,'patient');otherPatient=await signIn(ctx.app,'patient002');clinician=await signIn(ctx.app,'clinician');admin=await signIn(ctx.app,'admin');});
@@ -65,6 +77,16 @@ describe('private medical documents',()=>{
     expect((await download(clinician,saved.id)).statusCode).toBe(404);
     await grantPatient(ctx.app,'patient-001',['user-clinician']);
   });
+  it('blocks legacy HTTP uploads and quarantined or soft-deleted downloads',async()=>{
+    const retired=await ctx.app.inject({method:'POST',url:'/api/patients/patient-001/documents',headers:{cookie:patient},payload});
+    expect(retired.statusCode).toBe(410);
+    const saved=(await upload(patient)).json().document;
+    await ctx.app.db.pool.query("UPDATE medical_documents SET mdms_managed=true,processing_stage='security_checks' WHERE id=$1",[saved.id]);
+    expect((await download(patient,saved.id)).statusCode).toBe(404);
+    expect((await get(patient)).json().documents.some((item:{id:string})=>item.id===saved.id)).toBe(false);
+    await ctx.app.db.pool.query("UPDATE medical_documents SET mdms_managed=false,deleted_at=now() WHERE id=$1",[saved.id]);
+    expect((await download(patient,saved.id)).statusCode).toBe(404);
+  });
   it('rejects disguised, oversized and path-bearing files before writing to storage',async()=>{
     const before=uploaded.size;
     for(const body of [{...payload,mimeType:'application/pdf'},{...payload,filename:'../../private.txt'},{...payload,contentBase64:'invalid!'},{...payload,contentBase64:Buffer.alloc(500*1024+1).toString('base64')},{...payload,mimeType:'text/html'}])expect((await upload(patient,'patient-001',body)).statusCode).toBe(422);
@@ -116,7 +138,7 @@ describe('missing private storage configuration',()=>{
       const list=await ctx.app.inject({url:'/api/patients/patient-001/documents',headers:{cookie}});
       expect(list.statusCode).toBe(200);expect(list.json().storageAvailable).toBe(false);
       const result=await ctx.app.inject({method:'POST',url:'/api/patients/patient-001/documents',headers:{cookie,'idempotency-key':randomUUID()},payload:{documentType:'other',filename:'synthetic.txt',mimeType:'text/plain',contentBase64:Buffer.from('Synthetic').toString('base64')}});
-      expect(result.statusCode).toBe(503);expect(result.json().error.code).toBe('DOCUMENT_STORAGE_UNAVAILABLE');
+      expect(result.statusCode).toBe(410);expect(result.json().error.code).toBe('MANAGED_UPLOAD_REQUIRED');
     } finally {await ctx.close();}
   });
 });

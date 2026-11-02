@@ -5,3 +5,5 @@ allowBuilds:
   core-js: false
   esbuild: true
   sharp: true
+minimumReleaseAgeExclude:
+  - pdfjs-dist@6.5.438

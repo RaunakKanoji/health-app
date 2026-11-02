@@ -86,7 +86,7 @@ export class MedicalDocumentService {
     return this.db.transaction(async tx=>{
       await this.authorize(actor,patientId,tx);
       const release=actor.role==='patient'?" AND processing_status='ready' AND (uploaded_by=$5 OR EXISTS(SELECT 1 FROM lab_reports r WHERE r.document_id=medical_documents.id AND r.review_status='reviewed'))":'';
-      const rows=(await tx.query<DocumentRow>(`SELECT ${columns} FROM medical_documents WHERE organization_id=$1 AND patient_id=$2${release} ORDER BY created_at DESC,id DESC LIMIT $3 OFFSET $4`,[actor.organizationId,patientId,limit+1,offset,...(actor.role==='patient'?[actor.id]:[])])).rows;
+      const rows=(await tx.query<DocumentRow>(`SELECT ${columns} FROM medical_documents WHERE organization_id=$1 AND patient_id=$2 AND deleted_at IS NULL AND (NOT mdms_managed OR (security_status='safe' AND processing_stage NOT IN ('uploading','security_checks')))${release} ORDER BY created_at DESC,id DESC LIMIT $3 OFFSET $4`,[actor.organizationId,patientId,limit+1,offset,...(actor.role==='patient'?[actor.id]:[])])).rows;
       return {documents:rows.slice(0,limit).map(document),nextOffset:rows.length>limit?offset+limit:null,storageAvailable:Boolean(this.store)};
     });
   }
@@ -113,7 +113,7 @@ export class MedicalDocumentService {
   async download(actor:User,patientId:string,documentId:string){
     return this.db.transaction(async tx=>{
       await this.authorize(actor,patientId,tx);
-      const row=(await tx.query<DocumentRow>(`SELECT ${columns},storage_provider,storage_key,uploaded_by FROM medical_documents WHERE organization_id=$1 AND patient_id=$2 AND id=$3`,[actor.organizationId,patientId,documentId])).rows[0];
+      const row=(await tx.query<DocumentRow>(`SELECT ${columns},storage_provider,storage_key,uploaded_by FROM medical_documents WHERE organization_id=$1 AND patient_id=$2 AND id=$3 AND deleted_at IS NULL AND (NOT mdms_managed OR (security_status='safe' AND processing_stage NOT IN ('uploading','security_checks')))`,[actor.organizationId,patientId,documentId])).rows[0];
       if(!row)throw new DomainError('NOT_FOUND','This document is unavailable.',404);
       if(actor.role==='patient'&&row.uploaded_by!==actor.id&&!(await tx.query("SELECT id FROM lab_reports WHERE document_id=$1 AND review_status='reviewed' FOR SHARE",[row.id])).rowCount)throw new DomainError('NOT_FOUND','This document is unavailable.',404);
       if(!this.store||row.storage_provider!==this.store.provider||row.processing_status!=='ready')throw unavailable();

@@ -1,0 +1,3 @@
+# Preserve checksummed medical document fixture bytes across platforms.
+tests/fixtures/medical-documents/*.pdf binary
+tests/fixtures/medical-documents/*.png binary
