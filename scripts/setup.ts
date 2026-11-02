@@ -7,4 +7,4 @@ for (const command of ['db:start', 'db:migrate', 'db:seed']) {
   const result = spawnSync('pnpm', [command], { cwd: root, stdio: 'inherit' });
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
-console.log('Synthetic demonstration ready. Start with pnpm dev; open http://localhost:3000.');
+console.log('Synthetic demonstration ready. Configure Clerk as documented in docs/authentication/clerk-setup.md, start with pnpm dev, and open http://localhost:3001.');

@@ -1,3 +1,4 @@
+import { login } from './auth';
 import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -16,13 +17,7 @@ async function assertAccessible(page: Page, name: string) {
   }, null, 2));
   expect(violations, JSON.stringify(violations.map(item => ({ id:item.id, nodes:item.nodes.map(node=>({target:node.target,summary:node.failureSummary}))})), null, 2)).toEqual([]);
 }
-async function login(page: Page, role: string) {
-  await page.goto('/');
-  await page.getByLabel('Email address').fill(`${role}@careloop.demo`);
-  await page.getByLabel('Password', { exact: true }).fill('CareLoop-Demo-2026!');
-  await page.getByRole('button', { name: 'Sign in to workspace' }).click();
-  await expect(page.locator(role === 'patient' ? '.patient-app' : '.sidebar')).toBeVisible();
-}
+
 
 test.describe('Accessible synthetic care workspaces', () => {
   test.beforeAll(async () => { await mkdir('docs/demo/screenshots', { recursive: true }); });
@@ -44,20 +39,20 @@ test.describe('Accessible synthetic care workspaces', () => {
     await expect(page.getByRole('dialog')).not.toBeVisible();
     await expect(page.getByRole('button', { name: 'New screening result', exact: true })).toBeFocused();
   });
-  for (const language of ['en', 'ar'] as const) {
+  for (const language of ['en', 'hi'] as const) {
     test(`patient ${language} mobile portal has accessible language, controls and contrast`, async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await login(page, 'patient');
       const root = page.locator('.patient-app');
       if (await root.getAttribute('lang') !== language) {
-        await page.getByRole('button', { name: language === 'en' ? 'English' : 'العربية', exact: true }).click();
+        await page.getByRole('button', { name: language === 'en' ? 'English' : 'हिन्दी', exact: true }).click();
       }
       await expect(root).toHaveAttribute('lang', language);
-      await expect(root).toHaveAttribute('dir', language === 'ar' ? 'rtl' : 'ltr');
+      await expect(root).toHaveAttribute('dir', 'ltr');
       await assertAccessible(page, `patient-${language}-mobile`);
-      await page.screenshot({ path: `docs/demo/screenshots/patient-${language === 'ar' ? 'arabic' : 'english'}-mobile.png`, fullPage: true });
-      await page.getByRole('button', { name: language === 'ar' ? 'الخصوصية والتفضيلات' : 'Privacy & preferences', exact: true }).click();
-      await page.getByRole('button', { name: language === 'ar' ? 'تحديث التفضيلات' : 'Update preferences', exact: true }).click();
+      await page.screenshot({ path: `docs/demo/screenshots/patient-${language === 'hi' ? 'hindi' : 'english'}-mobile.png`, fullPage: true });
+      await page.getByRole('button', { name: language === 'hi' ? 'गोपनीयता और प्राथमिकताएँ' : 'Privacy & preferences', exact: true }).click();
+      await page.getByRole('button', { name: language === 'hi' ? 'प्राथमिकताएँ अपडेट करें' : 'Update preferences', exact: true }).click();
       await assertAccessible(page, `patient-${language}-preferences`);
       await page.keyboard.press('Escape');
       await expect(page.getByRole('dialog')).not.toBeVisible();

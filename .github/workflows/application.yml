@@ -1,7 +1,10 @@
 name: CareLoop application
 on: [push, pull_request]
+permissions:
+  contents: read
 jobs:
   verify:
+    name: Credential-free application verification
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -28,9 +31,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: cp .env.example .env
       - run: pnpm db:migrate && pnpm db:seed
-      - run: pnpm typecheck && pnpm lint && pnpm test && pnpm build
-      - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm test:e2e
+      - run: pnpm typecheck && pnpm lint && pnpm test
+      - name: Compile the web application without Clerk credentials
+        env:
+          # Encodes clerk.example.test$. This public placeholder only permits
+          # compilation; it cannot authenticate anyone and is never a runtime fallback.
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2xlcmsuZXhhbXBsZS50ZXN0JA==
+        run: pnpm build
       - run: python -m pip install -r services/ml/requirements.lock -e './services/ml[test]'
       - run: python -m pytest services/ml
       - run: pnpm simulate && pnpm evaluate
@@ -40,7 +47,107 @@ jobs:
         with:
           name: synthetic-verification
           path: |
-            playwright-report/
-            test-results/
             docs/evaluation/*results*
-            docs/demo/screenshots/
+  live-clerk-e2e:
+    name: Live Clerk browser verification (opt-in)
+    needs: verify
+    # Fork PR code must never execute with the development instance's credentials.
+    if: >-
+      vars.CLERK_E2E_ENABLED == 'true' &&
+      (github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: live-clerk-e2e-${{ github.repository }}
+      cancel-in-progress: false
+    env:
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ vars.CLERK_E2E_PUBLISHABLE_KEY }}
+      CLERK_PUBLISHABLE_KEY: ${{ vars.CLERK_E2E_PUBLISHABLE_KEY }}
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_E2E_SECRET_KEY }}
+      CLERK_E2E_CLINICIAN_USER_ID: ${{ vars.CLERK_E2E_CLINICIAN_USER_ID }}
+      CLERK_E2E_CLINICIAN_EMAIL: ${{ vars.CLERK_E2E_CLINICIAN_EMAIL }}
+      CLERK_E2E_PATIENT_USER_ID: ${{ vars.CLERK_E2E_PATIENT_USER_ID }}
+      CLERK_E2E_PATIENT_EMAIL: ${{ vars.CLERK_E2E_PATIENT_EMAIL }}
+      CLERK_E2E_COORDINATOR_USER_ID: ${{ vars.CLERK_E2E_COORDINATOR_USER_ID }}
+      CLERK_E2E_COORDINATOR_EMAIL: ${{ vars.CLERK_E2E_COORDINATOR_EMAIL }}
+      CLERK_E2E_RECEIVER_USER_ID: ${{ vars.CLERK_E2E_RECEIVER_USER_ID }}
+      CLERK_E2E_RECEIVER_EMAIL: ${{ vars.CLERK_E2E_RECEIVER_EMAIL }}
+      CLERK_E2E_ADMIN_USER_ID: ${{ vars.CLERK_E2E_ADMIN_USER_ID }}
+      CLERK_E2E_ADMIN_EMAIL: ${{ vars.CLERK_E2E_ADMIN_EMAIL }}
+      APP_ORIGIN: http://localhost:3001
+      API_URL: http://127.0.0.1:4001
+      API_PORT: '4001'
+      PLAYWRIGHT_BASE_URL: http://localhost:3001
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: careloop
+          POSTGRES_PASSWORD: careloop
+          POSTGRES_DB: careloop
+        ports: ['54329:5432']
+        options: >-
+          --health-cmd "pg_isready -U careloop -d careloop"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.12.0
+      - name: Require explicit development keys and approved synthetic fixture selectors
+        run: |
+          node --input-type=module <<'JS'
+          const roles=['CLINICIAN','PATIENT','COORDINATOR','RECEIVER','ADMIN'];
+          const settings={
+            CLERK_E2E_PUBLISHABLE_KEY:process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+            CLERK_E2E_SECRET_KEY:process.env.CLERK_SECRET_KEY,
+            ...Object.fromEntries(roles.flatMap(role=>['USER_ID','EMAIL'].map(suffix=>{
+              const name=`CLERK_E2E_${role}_${suffix}`;return [name,process.env[name]];
+            }))),
+          };
+          const missing=Object.entries(settings).filter(([,value])=>!value?.trim()).map(([name])=>name);
+          if(missing.length){process.stderr.write(`Missing configuration names: ${missing.join(', ')}\n`);process.exit(1);}
+          const invalid=new Set();
+          if(!settings.CLERK_E2E_PUBLISHABLE_KEY.startsWith('pk_test_'))invalid.add('CLERK_E2E_PUBLISHABLE_KEY');
+          if(!settings.CLERK_E2E_SECRET_KEY.startsWith('sk_test_'))invalid.add('CLERK_E2E_SECRET_KEY');
+          for(const role of roles){
+            const id=`CLERK_E2E_${role}_USER_ID`,email=`CLERK_E2E_${role}_EMAIL`;
+            if(!/^user_[A-Za-z0-9_-]+$/.test(settings[id]))invalid.add(id);
+            if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(settings[email]))invalid.add(email);
+          }
+          for(const suffix of ['USER_ID','EMAIL']){
+            const seen=new Map();
+            for(const role of roles){const name=`CLERK_E2E_${role}_${suffix}`,value=settings[name].toLowerCase();if(seen.has(value)){invalid.add(name);invalid.add(seen.get(value));}else seen.set(value,name);}
+          }
+          if(invalid.size){process.stderr.write(`Invalid configuration names: ${[...invalid].join(', ')}\n`);process.exit(1);}
+          JS
+      - run: pnpm install --frozen-lockfile
+      - name: Confirm each configured Clerk ID has its exact verified fixture email
+        run: |
+          node --input-type=module <<'JS'
+          import {createClerkClient} from '@clerk/backend';
+          const client=createClerkClient({secretKey:process.env.CLERK_SECRET_KEY});
+          for(const role of ['CLINICIAN','PATIENT','COORDINATOR','RECEIVER','ADMIN']){
+            const idName=`CLERK_E2E_${role}_USER_ID`,emailName=`CLERK_E2E_${role}_EMAIL`;
+            let user;try{user=await client.users.getUser(process.env[idName]);}catch{process.stderr.write(`Unverified configuration name: ${idName}\n`);process.exit(1);}
+            const email=user.emailAddresses.find(item=>item.id===user.primaryEmailAddressId);
+            if(user.id!==process.env[idName]||user.banned||user.locked||user.deprovisioned||email?.verification?.status!=='verified'||email.emailAddress.toLowerCase()!==process.env[emailName].toLowerCase()){
+              process.stderr.write(`Unverified configuration names: ${idName}, ${emailName}\n`);process.exit(1);
+            }
+          }
+          JS
+      - run: cp .env.example .env
+      - run: pnpm db:migrate && pnpm db:seed
+      - name: Link approved fixtures to the isolated database's existing synthetic roles
+        run: |
+          for role in clinician patient coordinator receiver admin; do
+            identity_variable="CLERK_E2E_${role^^}_USER_ID"
+            pnpm identity:provision --user "user-${role}" --clerk-user "${!identity_variable}" --apply > /dev/null
+          done
+      - run: pnpm exec playwright install --with-deps chromium
+      # Auth traces may contain session material. Do not upload live-auth artifacts.
+      - run: pnpm test:e2e --trace=off --reporter=line

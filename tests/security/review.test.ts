@@ -20,7 +20,7 @@ function readyEpisode(): Episode {
   tasks:[],events:[],closure:null,ownershipTransfer:null,
  };
 }
-function apply(e:Episode,actor:User,command:Omit<Command,'expectedVersion'>,shared=false) {
+function apply(e:Episode,actor:User,command:Omit<Command,'expectedVersion'>,shared=true) {
  return transition(e,actor,{...command,expectedVersion:e.version},{now,shared});
 }
 
@@ -35,7 +35,7 @@ describe('independent clinical and authorization regression review',()=>{
  it.each(['patient','coordinator','admin','receiver'] as const)('never allows %s to clinically close a case',role=>{
   const e=readyEpisode();const before=structuredClone(e);
   const actor={...clinician,role,patientId:role==='patient'?'patient-a':null,organizationId:role==='receiver'?'org-b':'org-a'};
-  expect(()=>apply(e,actor,{type:'close',note:'Complete synthetic clinician attestation'},role==='receiver')).toThrow();
+  expect(()=>apply(e,actor,{type:'close',note:'Complete synthetic clinician attestation'},true)).toThrow();
   expect(e).toEqual(before);
  });
  it('requires explicit patient acknowledgement even after delivery',()=>{
@@ -83,7 +83,7 @@ describe('independent clinical and authorization regression review',()=>{
   const e=readyEpisode();
   expect(()=>apply(e,clinician,{type:'mark_overdue'})).toThrow();
   expect(()=>apply(e,clinician,{type:'correct_result',content:'Untrusted source correction'})).toThrow();
-  expect(()=>transition(e,clinician,{type:'close',expectedVersion:9,note:'Complete clinician attestation'},{now,shared:false})).toThrow();
+  expect(()=>transition(e,clinician,{type:'close',expectedVersion:9,note:'Complete clinician attestation'},{now,shared:true})).toThrow();
  });
  it('failed ownership transfer retains the previous accountable owner',()=>{
   const e=readyEpisode();e.ownershipTransfer={requestedBy:clinician.id,targetUserId:'coordinator-next',targetName:'New owner',status:'PENDING',reason:'Request explicit handoff acceptance'};

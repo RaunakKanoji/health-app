@@ -1,15 +1,10 @@
+import { login } from './auth';
 import { test,expect,type Page } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import type { Episode } from '../../packages/contracts/src/careloop.ts';
 
 const localTime=(d:Date)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-async function login(page:Page,role:string){
- await page.request.post('/api/auth/logout',{data:{}});await page.goto('/');
- await page.getByLabel('Email address').fill(`${role}@careloop.demo`);
- await page.getByLabel('Password',{exact:true}).fill('CareLoop-Demo-2026!');
- await page.getByRole('button',{name:'Sign in to workspace'}).click();
- await expect(page.locator(role==='patient'?'.patient-app':'.sidebar')).toBeVisible();
-}
+
 async function open(page:Page,id:string){
  await page.getByRole('button',{name:/^Care episodes/}).click();
  await page.getByLabel('Search patients or episodes').fill(id);
@@ -52,7 +47,7 @@ test.describe.serial('Complete synthetic result-to-verified-care story',()=>{
   await page.getByRole('button',{name:'Send reminder',exact:true}).click();await confirm(page);
   await expect.poll(async()=>{const r=await page.request.get(`/api/episodes/${episodeId}`);return(await r.json()).episode.communications[0].status;},{timeout:15000}).toBe('DELIVERED');
  });
- test('3. patient explicitly acknowledges through the English and Arabic portal',async()=>{
+ test('3. patient explicitly acknowledges through the English and Hindi portal',async()=>{
   await login(page,'patient');if(await page.getByRole('button',{name:'English',exact:true}).isVisible())await page.getByRole('button',{name:'English',exact:true}).click();
   await page.locator('.patient-episode-select select').selectOption(episodeId);
   await page.getByRole('button',{name:'I have read my next steps',exact:true}).click();
@@ -97,7 +92,7 @@ test.describe.serial('Complete synthetic result-to-verified-care story',()=>{
   await page.reload();await open(page,episodeId);await expect(page.getByText('Clinician-approved closure',{exact:true})).toBeVisible();
  });
  test('8. rejected referral remains open and can be recovered by its owner',async()=>{
-  const admin=await page.context().request.post('/api/auth/login',{data:{email:'admin@careloop.demo',password:'CareLoop-Demo-2026!'}});expect(admin.ok()).toBe(true);
+  await login(page,'admin');
   const run=await page.request.post('/api/scenarios/run',{data:{scenarioId:'referral-rejection',seed:2019}});const result=await run.json();expect(result.passed).toBe(true);expect(result.actualState).toBe('BLOCKED');
   // Historical replays may already be due on the wall clock. Settle the worker
   // before opening an editable version so its escalation cannot race confirmation.
@@ -112,11 +107,11 @@ test.describe.serial('Complete synthetic result-to-verified-care story',()=>{
   await expect(page.getByText('Scenario passed',{exact:true})).toBeVisible();await expect(page.locator('.metadata-list').getByText('Overdue',{exact:true})).toHaveCount(2);
   await page.screenshot({path:'docs/demo/screenshots/scenario-lab.png',fullPage:true});
  });
- test('10. mobile Arabic portal and server prevent unauthorized access',async()=>{
+ test('10. mobile Hindi portal and server prevent unauthorized access',async()=>{
   await login(page,'patient');await page.setViewportSize({width:390,height:844});
-  if(await page.getByRole('button',{name:'العربية',exact:true}).isVisible())await page.getByRole('button',{name:'العربية',exact:true}).click();
-  await expect(page.locator('.patient-app')).toHaveAttribute('dir','rtl');
-  await page.screenshot({path:'docs/demo/screenshots/patient-arabic-mobile.png',fullPage:true});
+  if(await page.getByRole('button',{name:'हिन्दी',exact:true}).isVisible())await page.getByRole('button',{name:'हिन्दी',exact:true}).click();
+  await expect(page.locator('.patient-app')).toHaveAttribute('dir','ltr');await expect(page.locator('.patient-app')).toHaveAttribute('lang','hi');
+  await page.screenshot({path:'docs/demo/screenshots/patient-hindi-mobile.png',fullPage:true});
   expect((await page.request.get('/api/episodes/episode-002')).status()).toBe(404);
   const result=await page.request.post(`/api/episodes/${episodeId}/actions`,{headers:{'Idempotency-Key':'forbidden-e2e-closure'},data:{type:'close',expectedVersion:1,note:'Unauthorized patient closure attempt.'}});expect([403,409]).toContain(result.status());
   const size=await page.locator('.patient-app').boundingBox();expect(size!.width).toBeLessThanOrEqual(390);
