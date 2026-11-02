@@ -1,0 +1,58 @@
+{
+  "name": "careloop-ai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CareLoop AI \u2014 Closed-Loop Screening-to-Care Intelligence Platform",
+  "packageManager": "pnpm@11.12.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "tsx scripts/dev.ts",
+    "dev:web": "pnpm --filter @careloop/web dev",
+    "dev:api": "tsx --env-file=.env apps/api/src/index.ts",
+    "dev:worker": "tsx --env-file=.env apps/worker/src/index.ts",
+    "db:start": "tsx scripts/local-postgres.ts start",
+    "db:stop": "tsx scripts/local-postgres.ts stop",
+    "db:migrate": "tsx --env-file=.env packages/db/src/migrate.ts",
+    "db:seed": "tsx --env-file=.env scripts/seed/index.ts",
+    "demo:setup": "tsx scripts/setup.ts",
+    "demo:reset": "tsx --env-file=.env scripts/reset-demo.ts",
+    "import:synthea": "tsx --env-file=.env scripts/import-synthea.ts",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc --noEmit && pnpm --filter @careloop/web typecheck",
+    "lint": "eslint .",
+    "build": "turbo run build",
+    "simulate": "tsx --env-file=.env scripts/simulate/index.ts",
+    "evaluate": "tsx --env-file=.env scripts/evaluate/index.ts",
+    "benchmark": "tsx --env-file=.env scripts/evaluate/performance.ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/rate-limit": "^10.3.0",
+    "@opentelemetry/api": "^1.9.0",
+    "dotenv": "^17.2.3",
+    "drizzle-orm": "0.45.4",
+    "fastify": "5.12.7",
+    "pg": "^8.16.3",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@eslint/js": "^9.39.0",
+    "@playwright/test": "^1.56.1",
+    "@types/node": "^24.10.0",
+    "@types/pg": "^8.15.6",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "eslint": "^9.39.0",
+    "tsx": "^4.20.6",
+    "turbo": "^2.6.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.3",
+    "vitest": "5.0.5"
+  }
+}
