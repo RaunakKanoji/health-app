@@ -32,7 +32,8 @@
     "db:check": "tsx --env-file=.env packages/db/src/check.ts",
     "db:seed:clinical": "tsx --env-file=.env scripts/seed/clinical-journey.ts",
     "db:provision-runtime": "node --import tsx scripts/provision-runtime-database.ts",
-    "db:transfer-local": "node --import tsx scripts/migrate-local-to-neon.ts"
+    "db:transfer-local": "node --import tsx scripts/migrate-local-to-neon.ts",
+    "db:grant-documents": "node --import tsx scripts/grant-document-runtime.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1161.0",
@@ -47,6 +48,8 @@
     "dotenv": "^17.2.3",
     "drizzle-orm": "0.45.4",
     "fastify": "5.12.7",
+    "google-auth-library": "11.3.2",
+    "pdfjs-dist": "6.5.438",
     "pg": "^8.16.3",
     "zod": "^4.1.12"
   },

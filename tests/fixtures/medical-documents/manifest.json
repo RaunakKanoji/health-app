@@ -1,0 +1,60 @@
+{
+  "synthetic": true,
+  "containsRealPatientData": false,
+  "fixtures": [
+    {
+      "filename": "synthetic-cbc.pdf",
+      "mimeType": "application/pdf",
+      "sha256": "6ba7d8897afb4f26ca35daae65b708e59347feab31b534f38bc9e6a2a0806f00",
+      "bytes": 1200
+    },
+    {
+      "filename": "synthetic-hba1c.pdf",
+      "mimeType": "application/pdf",
+      "sha256": "f941d0e6ebc1a00f4a9db2671a31a27a932285dca8d8d2b1cc249e8ab0365524",
+      "bytes": 1093
+    },
+    {
+      "filename": "synthetic-hba1c-followup.pdf",
+      "mimeType": "application/pdf",
+      "sha256": "b5e16c6fae512c6c071acf6529f4e197c45341682750abd998d249eac9acca13",
+      "bytes": 1093
+    },
+    {
+      "filename": "synthetic-lipids.pdf",
+      "mimeType": "application/pdf",
+      "sha256": "30c0e38ca49f5824935226aa601069050a3cfc075e270d5e520e3cf4410a8a2d",
+      "bytes": 1081
+    },
+    {
+      "filename": "synthetic-metabolic.pdf",
+      "mimeType": "application/pdf",
+      "sha256": "2efcf383c5950e8caed42b767586bbd995f3dcbade9d981bff48cb389832d0f6",
+      "bytes": 1099
+    },
+    {
+      "filename": "synthetic-consultation.pdf",
+      "mimeType": "application/pdf",
+      "sha256": "0f547bea30a17df525b0d0fb30bd6662f96513a2bde6e58e67a03b0c335ae4b9",
+      "bytes": 984
+    },
+    {
+      "filename": "synthetic-prescription.pdf",
+      "mimeType": "application/pdf",
+      "sha256": "8d10829382440df47f4ca33ea06e88be29a8cde6784c9cd602a3f1834911feec",
+      "bytes": 1001
+    },
+    {
+      "filename": "synthetic-ambiguous.pdf",
+      "mimeType": "application/pdf",
+      "sha256": "1201065affb22ff7bf5d18558e92edde568bc8edb5e3ea85f00efd8d29bd5e07",
+      "bytes": 1002
+    },
+    {
+      "filename": "synthetic-scanned.png",
+      "mimeType": "image/png",
+      "sha256": "4ee376dfb1e7596878ad4982999804eecdc5c72e7ea738888fd8428dd5400604",
+      "bytes": 39577
+    }
+  ]
+}

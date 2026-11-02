@@ -67,6 +67,7 @@ export class ClinicalRecordService {
      // Documents uploaded by staff become patient-visible only after their report is reviewed.
      if(key==='documents')filter=" AND processing_status='ready' AND (uploaded_by=$5 OR EXISTS(SELECT 1 FROM lab_reports r WHERE r.document_id=medical_documents.id AND r.review_status='reviewed'))";
     }
+    if(key==='documents')filter+=" AND deleted_at IS NULL AND (NOT mdms_managed OR (security_status='safe' AND processing_stage NOT IN ('uploading','security_checks')))";
     const args:unknown[]=[actor.organizationId,patientId,limit,offset];if(key==='documents'&&actor.role==='patient')args.push(actor.id);
     result[key]=(await tx.query(`SELECT ${def.columns} FROM ${def.table} WHERE organization_id=$1 AND patient_id=$2${filter} ORDER BY created_at DESC,id DESC LIMIT $3 OFFSET $4`,args)).rows.map(camel);
    }
@@ -92,7 +93,8 @@ export class ClinicalRecordService {
    // Original observations preserve coded components and source provenance. Patients
    // see released report measurements instead of unreviewed FHIR source payloads.
    const observations=actor.role==='patient'?[]:(await tx.query('SELECT id,coding,value,effective_at,source_resource_id,created_at FROM observations WHERE organization_id=$1 AND patient_id=$2 ORDER BY effective_at DESC NULLS LAST,id LIMIT 50',[actor.organizationId,patientId])).rows.map(camel);
-   return {patient:camel(profile),observations,consultations:flags.includeConsultations?records.consultations:[],notes:flags.includeConsultations?records.notes:[],labReports:flags.includeLabResults?records.labReports:[],labResults:flags.includeLabResults?records.labResults:[],treatmentPlans:flags.includeTreatments?records.treatmentPlans:[],followups:records.followups,analyses:flags.includeAIHistory?records.analyses:[],findings:flags.includeAIHistory?records.findings:[],retrievedAt:new Date().toISOString(),synthetic:true,externalTransmission:false,limitations:['Bounded to 50 records per collection; use paginated records for history.','General condition, allergy and prescription modules are not implemented.','AI output is a draft until reviewed and never establishes a diagnosis.']};
+   const documentObservations=flags.includeLabResults?(await tx.query(`SELECT o.id,o.patient_id,o.document_id,o.document_version_id,o.test_name,o.numeric_value,o.text_value,o.original_value,o.original_unit,o.unit,o.reference_range_low,o.reference_range_high,o.reference_range_text,o.observed_at::text AS observed_at,o.source_page,o.source_text,o.verification_status,o.verified_by,o.verified_at FROM clinical_observations o JOIN medical_documents d ON d.id=o.document_id AND d.current_version_id=o.document_version_id WHERE o.organization_id=$1 AND o.patient_id=$2 AND o.verification_status='verified' AND d.deleted_at IS NULL AND d.security_status='safe' AND d.clinical_review_status='approved' ORDER BY o.observed_at DESC NULLS LAST,o.id LIMIT 50`,[actor.organizationId,patientId])).rows.map(camel):[];
+   return {patient:camel(profile),observations,documentObservations,consultations:flags.includeConsultations?records.consultations:[],notes:flags.includeConsultations?records.notes:[],labReports:flags.includeLabResults?records.labReports:[],labResults:flags.includeLabResults?records.labResults:[],treatmentPlans:flags.includeTreatments?records.treatmentPlans:[],followups:records.followups,analyses:flags.includeAIHistory?records.analyses:[],findings:flags.includeAIHistory?records.findings:[],retrievedAt:new Date().toISOString(),synthetic:true,externalTransmission:false,limitations:['Bounded to 50 records per collection; use paginated records for history.','General condition, allergy and prescription modules are not implemented.','AI output is a draft until reviewed and never establishes a diagnosis.']};
   });
  }
  private async reference(tx:Transaction,actor:User,patientId:string,table:string,id:string|undefined){
@@ -142,7 +144,7 @@ export class ClinicalRecordService {
     }
     case 'lab-reports':{
      const d=clinicalInputs['lab-reports'].parse(parsed);await this.reference(tx,actor,patientId,'lab_orders',d.labOrderId);await this.reference(tx,actor,patientId,'medical_documents',d.documentId);
-     if(d.documentId&&!(await tx.query("SELECT id FROM medical_documents WHERE id=$1 AND processing_status='ready'",[d.documentId])).rowCount)throw new DomainError('DOCUMENT_NOT_READY','Complete the document upload before linking a report.',409);
+     if(d.documentId&&!(await tx.query("SELECT id FROM medical_documents WHERE id=$1 AND processing_status='ready' AND deleted_at IS NULL AND (NOT mdms_managed OR (security_status='safe' AND clinical_review_status='approved'))",[d.documentId])).rowCount)throw new DomainError('DOCUMENT_NOT_READY','Complete the document upload before linking a report.',409);
      return insert('lab_reports',['lab_order_id','document_id','laboratory_name','report_date','created_by','processing_status'],[d.labOrderId??null,d.documentId??null,d.laboratoryName,d.reportDate,actor.id,'processed']);
     }
     case 'lab-results':{

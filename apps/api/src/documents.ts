@@ -1,6 +1,7 @@
 import {z} from 'zod';
+import {DomainError} from '../../../packages/domain/src/index.ts';
 import type {CareLoopApp} from './app.ts';
-import {createDocumentStore,documentUploadSchema,MedicalDocumentService,type PrivateDocumentStore} from '../../../packages/workflows/src/medical-documents.ts';
+import {createDocumentStore,MedicalDocumentService,type PrivateDocumentStore} from '../../../packages/workflows/src/medical-documents.ts';
 
 export async function registerDocumentRoutes(app:CareLoopApp,store:PrivateDocumentStore|null=createDocumentStore()){
   const service=new MedicalDocumentService(app.db,store);
@@ -10,8 +11,8 @@ export async function registerDocumentRoutes(app:CareLoopApp,store:PrivateDocume
     return service.list(await app.authenticate(request),request.params.patientId,page.limit,page.offset);
   });
   app.post<{Params:{patientId:string}}>('/api/patients/:patientId/documents',async request=>{
-    const actor=await app.authenticate(request),input=documentUploadSchema.parse(request.body),key=z.string().min(1).max(200).parse(request.headers['idempotency-key']);
-    return {document:await service.upload(actor,request.params.patientId,input,key)};
+    await app.authenticate(request);
+    throw new DomainError('MANAGED_UPLOAD_REQUIRED','Use the medical-document upload initialization and completion endpoints.',410);
   });
   app.post<{Params:{patientId:string;documentId:string}}>('/api/patients/:patientId/documents/:documentId/download',async request=>{
     const actor=await app.authenticate(request);

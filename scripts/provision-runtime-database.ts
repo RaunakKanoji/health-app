@@ -15,11 +15,14 @@ export const runtimeInsertTables=[
   'clinician_profiles','clinician_patient_relationships','clerk_webhook_deliveries','clerk_identity_tombstones',
   'consultations','clinical_notes','medical_documents','lab_orders','lab_reports','lab_results','ai_analyses','ai_findings',
   'ai_analysis_sources','treatment_plans','followups','clinical_record_commands',
+  'document_versions','document_security_checks','document_upload_sessions','document_processing_jobs','document_extractions',
+  'clinical_observations','document_observation_corrections','clinical_document_reviews','document_timeline_events',
 ] as const;
 export const runtimeUpdateTables=[
   'users','patients','screening_results','care_episodes','episode_tasks','referrals','appointments','communications',
   'evidence_records','access_grants','inbox_events','outbox_events','clinician_profiles','clinician_patient_relationships',
   'clerk_identity_tombstones','lab_orders','lab_reports','ai_analyses','ai_findings',
+  'medical_documents','document_upload_sessions','document_processing_jobs','clinical_observations',
 ] as const;
 const identifier=(name:string)=>`"${name.replaceAll('"','""')}"`;
 const qualified=(schema:string,table:string)=>`${identifier(schema)}.${identifier(table)}`;
