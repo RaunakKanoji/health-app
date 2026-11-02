@@ -16,6 +16,8 @@ These commands write to the configured database. Confirm `DATABASE_ENVIRONMENT=d
 
 The seed does not create Clerk accounts, alter real development Clerk users or fabricate authentication. UI demo access requires deliberate linkage/authorization using the existing identity provisioning process. The fixture includes laboratory metadata/measurements, not a fake uploaded object; private object storage must be configured and an actual upload performed to demonstrate file retrieval.
 
+Programmatic callers may pass `seedClinicalJourney(db, {reportDocumentId})` to associate the report with an existing document for the controlled synthetic patient. The existing report service checks patient scope and document readiness; the seed creates no upload or object and requires no storage credentials. Omit the option to retain the metadata-only fixture. Choose the document before the first run: stable command keys make replay with the same option idempotent and reject a different document under the same fixture key.
+
 The application must refuse production seeds. Do not run `demo:reset`, scenario simulation or destructive SQL merely to inspect existing data.
 
 The current user-selected Neon branch is named `production`. These routine seed commands intentionally reject it. The initial record-preserving transfer is a separate authorized setup operation; it is not permission to reseed, reset or simulate against that branch. Continue running repeatable tests in disposable local schemas or explicitly selected test branches.

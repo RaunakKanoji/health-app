@@ -6,7 +6,7 @@ import { WorkflowService } from '../../packages/workflows/src/service.ts';
 import { ClinicalRecordService } from '../../packages/workflows/src/clinical-records.ts';
 
 /** Optional fixed fixture. Never discovers or attaches itself to user-created profiles. */
-export async function seedClinicalJourney(db:Db){
+export async function seedClinicalJourney(db:Db,options:{reportDocumentId?:string}={}){
  if(process.env.DEMO_MODE!=='true'||(process.env.DATABASE_ENVIRONMENT&&!['development','test'].includes(process.env.DATABASE_ENVIRONMENT)))throw new Error('Clinical fixtures require synthetic development or test mode.');
  const fixture=(await db.pool.query("SELECT p.id FROM patients p JOIN patient_identifiers i ON i.patient_id=p.id AND i.organization_id=p.organization_id WHERE p.id='patient-001' AND p.organization_id='org-screening' AND p.synthetic=true AND i.system='https://careloop.demo/synthetic' AND i.value='SYN-001'")).rows[0];
  const actor=await new WorkflowService(db).user('user-clinician');
@@ -16,7 +16,7 @@ export async function seedClinicalJourney(db:Db){
  const consultation=await create('consultations',{chiefComplaint:'Synthetic demonstration: discuss a screening result; no diagnosis established.',encounterType:'outpatient'},'consultation');
  await create('notes',{consultationId:consultation.id,noteType:'clinical',content:'SYNTHETIC EXAMPLE. A clinician reviewed the screening context and arranged a laboratory investigation. This fixture is not clinical guidance.',status:'signed'},'note');
  const order=await create('lab-orders',{consultationId:consultation.id,testName:'Synthetic glucose measurement',testCode:'SYN-GLUCOSE'},'order');
- const report=await create('lab-reports',{labOrderId:order.id,laboratoryName:'Synthetic Demonstration Laboratory',reportDate:'2026-11-02'},'report');
+ const report=await create('lab-reports',{labOrderId:order.id,laboratoryName:'Synthetic Demonstration Laboratory',reportDate:'2026-11-02',...(options.reportDocumentId?{documentId:options.reportDocumentId}:{})},'report');
  await create('lab-results',{labReportId:report.id,testName:'Synthetic glucose measurement',numericValue:'5.2',unit:'mmol/L',referenceText:'Synthetic fixture range; not for clinical interpretation.',extractionStatus:'manual'},'result');
  await service.review(actor,patient,'lab-reports',report.id,'reviewed','synthetic-journey-v1:report-review');
  const analysis=await create('analyses',{labReportId:report.id,consultationId:consultation.id},'analysis');
