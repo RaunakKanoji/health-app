@@ -27,21 +27,25 @@ export function CareLoopAuthProvider({children}: {children: ReactNode}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<IdentityError | null>(null);
   const requestVersion = useRef(0);
+  const identityRequest = useRef<AbortController | null>(null);
   const sessionKey = userId && sessionId ? `${userId}:${sessionId}` : null;
   const refresh = useCallback(async () => {
     if (!isLoaded || !isSignedIn || !sessionKey) return null;
-    setSessionTokenGetter(() => getToken());
+    setSessionTokenGetter(() => getToken(), sessionKey);
+    identityRequest.current?.abort();
+    const controller = new AbortController();
+    identityRequest.current = controller;
     const version = ++requestVersion.current;
     setLoading(true);
     setError(null);
     try {
-      const value = await request<ApplicationIdentity>('/identity');
-      if (version !== requestVersion.current) return null;
+      const value = await request<ApplicationIdentity>('/identity', { signal: controller.signal });
+      if (version !== requestVersion.current || controller.signal.aborted) return null;
       setIdentity(value);
       setResolvedFor(sessionKey);
       return value;
     } catch (failure) {
-      if (version !== requestVersion.current) return null;
+      if (version !== requestVersion.current || controller.signal.aborted) return null;
       setIdentity(null);
       setResolvedFor(null);
       setError({
@@ -51,11 +55,14 @@ export function CareLoopAuthProvider({children}: {children: ReactNode}) {
       });
       return null;
     } finally {
-      if (version === requestVersion.current) setLoading(false);
+      if (identityRequest.current === controller) identityRequest.current = null;
+      if (version === requestVersion.current && !controller.signal.aborted) setLoading(false);
     }
   }, [isLoaded, isSignedIn, sessionKey, getToken]);
   useEffect(() => {
     requestVersion.current++;
+    identityRequest.current?.abort();
+    identityRequest.current = null;
     setIdentity(null);
     setResolvedFor(null);
     setError(null);
@@ -65,9 +72,9 @@ export function CareLoopAuthProvider({children}: {children: ReactNode}) {
       setLoading(false);
       return;
     }
-    setSessionTokenGetter(() => getToken());
+    setSessionTokenGetter(() => getToken(), sessionKey ?? undefined);
     void refresh();
-    return () => { requestVersion.current++; setSessionTokenGetter(null); };
+    return () => { requestVersion.current++; identityRequest.current?.abort(); identityRequest.current = null; setSessionTokenGetter(null); };
   }, [isLoaded, isSignedIn, sessionKey, getToken, refresh]);
   useEffect(() => {
     const restored = (event: PageTransitionEvent) => { if (event.persisted) {setIdentity(null);setResolvedFor(null);void refresh();} };
@@ -76,6 +83,8 @@ export function CareLoopAuthProvider({children}: {children: ReactNode}) {
   }, [refresh]);
   const signOut = useCallback(async () => {
     requestVersion.current++;
+    identityRequest.current?.abort();
+    identityRequest.current = null;
     setSessionTokenGetter(null);
     setIdentity(null);
     setResolvedFor(null);

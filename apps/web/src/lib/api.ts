@@ -37,20 +37,61 @@ export class ApiFailure extends Error {
 }
 let sessionTokenGetter: (() => Promise<string | null>) | null = null;
 let sessionEpoch = 0;
-export function setSessionTokenGetter(getter: (() => Promise<string | null>) | null) { sessionTokenGetter = getter; sessionEpoch++; }
-export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+let sessionIdentity: string | symbol | null = null;
+export function setSessionTokenGetter(getter: (() => Promise<string | null>) | null, identity?: string) {
+  const nextIdentity = getter ? identity ?? Symbol() : null;
+  sessionTokenGetter = getter;
+  if (nextIdentity !== sessionIdentity) { sessionIdentity = nextIdentity; sessionEpoch++; }
+}
+export type ApiRequestOptions = RequestInit & { timeoutMs?: number };
+export async function request<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
   const epoch = sessionEpoch;
-  const token = await sessionTokenGetter?.();
-  if (!token || epoch !== sessionEpoch) throw new ApiFailure('Sign in to continue.', 401, 'UNAUTHENTICATED');
-  const response = await fetch(`/api${path}`, { credentials: 'same-origin', cache: 'no-store', ...options,
-    headers: { 'Content-Type': 'application/json', ...options.headers, Authorization: `Bearer ${token}` } });
-  const result = await response.json().catch(() => null) as T | ApiError | null;
-  if (epoch !== sessionEpoch) throw new ApiFailure('Your session changed. Sign in again.', 401, 'SESSION_CHANGED');
-  if (!response.ok) {
-    const error = result && typeof result === 'object' && 'error' in result ? (result as ApiError).error : null;
-    throw new ApiFailure(error?.message ?? 'The service could not complete this request. Please try again.', response.status, error?.code ?? 'REQUEST_FAILED');
+  const readOnly = ['GET', 'HEAD'].includes((options.method ?? 'GET').toUpperCase());
+  const { timeoutMs = readOnly ? 15000 : 60000, signal: callerSignal, ...init } = options;
+  const controller = new AbortController();
+  const cancel = () => controller.abort(callerSignal?.reason);
+  if (callerSignal?.aborted) cancel();
+  else callerSignal?.addEventListener('abort', cancel, { once: true });
+  const timeout = setTimeout(() => controller.abort(new ApiFailure(
+    readOnly ? 'Loading took too long. Please check your connection and try again.' : 'The request timed out. Refresh to check whether your change was saved before trying again.',
+    408, 'REQUEST_TIMEOUT',
+  )), timeoutMs);
+  const checkCurrent = () => {
+    controller.signal.throwIfAborted();
+    if (epoch !== sessionEpoch) throw new ApiFailure('Your session changed. Sign in again.', 401, 'SESSION_CHANGED');
+  };
+  let stopListening = () => {};
+  // Token acquisition is not abortable. Race the entire operation, then recheck
+  // cancellation before fetch so a late token can never send an abandoned request.
+  const aborted = new Promise<never>((_resolve, reject) => {
+    const rejectAbort = () => reject(controller.signal.reason);
+    if (controller.signal.aborted) rejectAbort();
+    else {
+      controller.signal.addEventListener('abort', rejectAbort, { once: true });
+      stopListening = () => controller.signal.removeEventListener('abort', rejectAbort);
+    }
+  });
+  const perform = async (): Promise<T> => {
+    checkCurrent();
+    const token = await sessionTokenGetter?.();
+    checkCurrent();
+    if (!token) throw new ApiFailure('Sign in to continue.', 401, 'UNAUTHENTICATED');
+    const headers = new Headers(init.headers);
+    if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+    headers.set('Authorization', `Bearer ${token}`);
+    const response = await fetch(`/api${path}`, { credentials: 'same-origin', cache: 'no-store', ...init, headers, signal: controller.signal });
+    checkCurrent();
+    const result = response.status === 204 ? null : await response.json().catch(() => null) as T | ApiError | null;
+    checkCurrent();
+    if (!response.ok) {
+      const error = result && typeof result === 'object' && 'error' in result ? (result as ApiError).error : null;
+      throw new ApiFailure(error?.message ?? 'The service could not complete this request. Please try again.', response.status, error?.code ?? 'REQUEST_FAILED');
+    }
+    if (result === null && response.status !== 204) throw new ApiFailure('The service returned an invalid response. Please try again.', 502, 'INVALID_RESPONSE');
+    return result as T;
   }
-  return result as T;
+  try { return await Promise.race([perform(), aborted]); }
+  finally { clearTimeout(timeout); stopListening(); callerSignal?.removeEventListener('abort', cancel); }
 }
 export const api = {
   documents: (patientId:string,offset=0,signal?:AbortSignal) => request<{documents:PrivateMedicalDocument[];nextOffset:number|null;storageAvailable:boolean}>(`/patients/${encodeURIComponent(patientId)}/documents?limit=20&offset=${offset}`,{signal}),
@@ -60,7 +101,7 @@ export const api = {
   clinicalRecords: (patientId:string,offset=0,signal?:AbortSignal) => request<PatientClinicalRecords>(`/patients/${encodeURIComponent(patientId)}/clinical-records?limit=20&offset=${offset}`,{signal}),
   createClinicalRecord: <R extends keyof ClinicalRecordInputs>(patientId:string,resource:R,input:ClinicalRecordInputs[R],key=crypto.randomUUID()) => request<{record:ClinicalRecord}>(`/patients/${encodeURIComponent(patientId)}/clinical-records/${resource}`,{method:'POST',headers:{'Idempotency-Key':key},body:JSON.stringify(input)}),
   reviewClinicalRecord: (patientId:string,resource:'lab-reports'|'analyses',id:string,decision:'reviewed'|'accepted'|'rejected',key=crypto.randomUUID()) => request(`/patients/${encodeURIComponent(patientId)}/clinical-records/${resource}/${encodeURIComponent(id)}/review`,{method:'POST',headers:{'Idempotency-Key':key},body:JSON.stringify({decision})}),
-  workspace: () => request<Workspace>('/workspace'),
+  workspace: (signal?: AbortSignal) => request<Workspace>('/workspace', { signal }),
   command: (id: string, command: Command, key = crypto.randomUUID()) => request<{episode: Episode}>(`/episodes/${id}/actions`, { method: 'POST', headers: {'Idempotency-Key': key}, body: JSON.stringify(command) }),
   assistant: (id: string, question: string) => request<AssistantResponse>(`/episodes/${id}/assistant`, {method:'POST',body:JSON.stringify({question})}),
 };

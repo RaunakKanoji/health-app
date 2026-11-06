@@ -49,15 +49,52 @@ export class WorkflowService {
  async listEpisodes(actor:User):Promise<Episode[]>{
   const current=await this.user(actor.id);
   if(!current||current.role!==actor.role||current.organizationId!==actor.organizationId||current.accountStatus!=='active'||!current.onboardingCompleted||(current.role==='clinician'&&current.clinicianStatus!=='approved'))throw new DomainError('FORBIDDEN','Complete onboarding and obtain the required care-team approval before accessing clinical workspaces.',403);
-  let query='SELECT e.snapshot FROM care_episodes e WHERE e.organization_id=$1';const args:unknown[]=[actor.organizationId];
-  if(actor.role==='patient'){query+=' AND e.patient_id=$2';args.push(actor.patientId);}
-  else if(actor.role==='receiver')query='SELECT e.snapshot FROM care_episodes e JOIN access_grants g ON g.episode_id=e.id WHERE g.receiving_organization_id=$1 AND g.revoked_at IS NULL';
-  else {query+=" AND EXISTS(SELECT 1 FROM clinician_patient_relationships r WHERE r.organization_id=e.organization_id AND r.patient_id=e.patient_id AND r.clinician_id=$2 AND r.relationship_status='active' AND r.revoked_at IS NULL)";args.push(actor.id);}
-  query+=' ORDER BY e.updated_at DESC';const rows=(await this.db.pool.query<{snapshot:Episode}>(query,args)).rows;const results:Episode[]=[];
-  for(const {snapshot} of rows)if(await this.canRead(actor,snapshot))results.push(this.projectFor(actor,await this.withConsent(snapshot)));
-  return results;
+  const args:unknown[]=[actor.id,actor.organizationId,actor.role];
+  let access:string;
+  if(actor.role==='patient'){
+   access='e.organization_id=$2 AND e.patient_id=$4 AND e.patient_id=u.patient_id';args.push(actor.patientId);
+  }else if(actor.role==='receiver'){
+   access=`EXISTS(SELECT 1 FROM access_grants g WHERE g.episode_id=e.id
+    AND g.receiving_organization_id=u.organization_id AND g.revoked_at IS NULL)`;
+  }else{
+   access=`e.organization_id=$2 AND EXISTS(SELECT 1 FROM clinician_patient_relationships r
+    WHERE r.organization_id=e.organization_id AND r.patient_id=e.patient_id AND r.clinician_id=u.id
+    AND r.relationship_status='active' AND r.revoked_at IS NULL)`;
+  }
+  // Read current authorization and consent together. Serial per-episode lookups made
+  // every database round trip part of the initial workspace's critical path.
+  const rows=(await this.db.pool.query<{snapshot:Episode;communication_consent:boolean}>(`
+   SELECT e.snapshot,COALESCE(consent.granted,false) AS communication_consent
+   FROM care_episodes e
+   JOIN users u ON u.id=$1
+   LEFT JOIN clinician_profiles cp ON cp.user_id=u.id
+   LEFT JOIN LATERAL (
+    SELECT c.granted FROM patient_consents c
+    WHERE c.organization_id=e.organization_id AND c.patient_id=e.patient_id
+     AND c.purpose='optional_communications'
+    ORDER BY c.sequence DESC LIMIT 1
+   ) consent ON true
+   WHERE u.organization_id=$2 AND u.role=$3 AND u.account_status='active' AND u.onboarding_completed=true
+    AND (u.role<>'clinician' OR cp.verification_status='approved')
+    AND ${access}
+    AND e.snapshot->>'id'=e.id AND e.snapshot->>'organizationId'=e.organization_id
+    AND e.snapshot#>>'{patient,id}'=e.patient_id
+   ORDER BY e.updated_at DESC`,args)).rows;
+  return rows.filter(({snapshot})=>canReadEpisode(actor,snapshot,true)).map(({snapshot,communication_consent})=>
+   this.projectFor(actor,{...snapshot,patient:{...snapshot.patient,communicationConsent:communication_consent}}));
  }
- async workspace(actor:User):Promise<Workspace>{const episodes=await this.listEpisodes(actor);const ownOrganization=(await this.db.pool.query<{id:string;name:string}>('SELECT id,name FROM organizations WHERE id=$1',[actor.organizationId])).rows;const organizations=['clinician','coordinator','admin'].includes(actor.role)?(await this.db.pool.query<{id:string;name:string}>('SELECT id,name FROM organizations ORDER BY name')).rows:ownOrganization;return {user:actor,organizations,users:['clinician','coordinator','admin'].includes(actor.role)?(await this.users()).filter(u=>u.organizationId===actor.organizationId&&u.role!=='patient'&&u.accountStatus==='active'):[],policies,episodes,metrics:this.calculateMetrics(episodes),simulated:true};}
+ async workspace(actor:User):Promise<Workspace>{
+  const episodes=await this.listEpisodes(actor);
+  const staff=['clinician','coordinator','admin'].includes(actor.role);
+  const [organizations,users]=await Promise.all([
+   this.db.pool.query<{id:string;name:string}>(staff?'SELECT id,name FROM organizations ORDER BY name':'SELECT id,name FROM organizations WHERE id=$1',staff?[]:[actor.organizationId]).then(result=>result.rows),
+   staff?this.db.pool.query<UserRow>(`SELECT u.*,cp.verification_status AS clinician_status
+    FROM users u LEFT JOIN clinician_profiles cp ON cp.user_id=u.id
+    WHERE u.organization_id=$1 AND u.role<>'patient' AND u.account_status='active'
+    ORDER BY u.name`,[actor.organizationId]).then(result=>result.rows.map(publicUser)):Promise.resolve([]),
+  ]);
+  return {user:actor,organizations,users,policies,episodes,metrics:this.calculateMetrics(episodes),simulated:true};
+ }
  calculateMetrics(episodes:Episode[]):Metrics {
   const ratio=(numerator:number,denominator:number):Metric=>({numerator,denominator,rate:denominator?numerator/denominator:null});
   const referrals=episodes.flatMap(e=>e.referrals),appointments=episodes.flatMap(e=>e.appointments);
